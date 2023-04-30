@@ -1,0 +1,11 @@
+[package]
+name = "atp"
+version = "0.0.0"
+edition = "2021"
+description = "A command line tool for the Authenticated Transfer Protocol"
+license = "MIT"
+
+[dependencies]
+anyhow = "1.0.71"
+clap = { version = "4.2.5", features = ["derive"] }
+tokio = { version = "1.28.0", features = ["rt-multi-thread", "macros"] }
