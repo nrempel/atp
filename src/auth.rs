@@ -1,7 +1,7 @@
 use clap::Parser;
 use serde::{Deserialize, Serialize};
 
-use crate::{Client, BASE_URL};
+use crate::{Client, Config, BASE_URL};
 
 #[derive(Parser)]
 pub enum Auth {
@@ -48,4 +48,36 @@ pub struct LoginResponse {
     pub(crate) email: String,
     pub(crate) access_jwt: String,
     pub(crate) refresh_jwt: String,
+}
+
+pub(super) async fn make_authenticated_request<T: serde::de::DeserializeOwned>(
+    client: &Client,
+    config: &Config,
+    endpoint: &str,
+    query: &[(&str, String)],
+) -> anyhow::Result<T> {
+    let url = format!("{}/app.bsky.actor.{}", super::BASE_URL, endpoint);
+
+    let session = config
+        .session
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("Not logged in"))?;
+
+    let res = client
+        .inner()
+        .get(url)
+        .header("Authorization", format!("Bearer {}", session.access_jwt))
+        .query(query)
+        .send()
+        .await?;
+
+    match res.status() {
+        reqwest::StatusCode::OK => Ok(res.json().await?),
+        reqwest::StatusCode::UNAUTHORIZED => anyhow::bail!("Authentication required"),
+        reqwest::StatusCode::NOT_FOUND => anyhow::bail!("Not found"),
+        _ => {
+            let error = res.text().await?;
+            anyhow::bail!("Request failed: {}", error)
+        }
+    }
 }

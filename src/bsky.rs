@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use clap::Parser;
 use serde::Deserialize;
 
-use crate::{Client, Config, Process};
+use crate::{auth::make_authenticated_request, Client, Config, Process};
 
 impl Profile {
     pub async fn process(
@@ -281,38 +281,6 @@ pub struct SuggestionsResponse {
 pub struct SearchActorsResponse {
     actors: Vec<ProfileResponse>,
     cursor: Option<String>,
-}
-
-async fn make_authenticated_request<T: serde::de::DeserializeOwned>(
-    client: &Client,
-    config: &Config,
-    endpoint: &str,
-    query: &[(&str, String)],
-) -> anyhow::Result<T> {
-    let url = format!("{}/app.bsky.actor.{}", super::BASE_URL, endpoint);
-
-    let session = config
-        .session
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("Not logged in"))?;
-
-    let res = client
-        .inner()
-        .get(url)
-        .header("Authorization", format!("Bearer {}", session.access_jwt))
-        .query(query)
-        .send()
-        .await?;
-
-    match res.status() {
-        reqwest::StatusCode::OK => Ok(res.json().await?),
-        reqwest::StatusCode::UNAUTHORIZED => anyhow::bail!("Authentication required"),
-        reqwest::StatusCode::NOT_FOUND => anyhow::bail!("Not found"),
-        _ => {
-            let error = res.text().await?;
-            anyhow::bail!("Request failed: {}", error)
-        }
-    }
 }
 
 trait PaginatedResponse: Display {
