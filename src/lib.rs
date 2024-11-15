@@ -1,3 +1,5 @@
+pub mod bsky;
+
 use std::fmt::Display;
 
 use anyhow::Ok;
@@ -7,6 +9,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::fs::read_to_string;
 
+const BASE_URL: &str = "https://bsky.social/xrpc";
+
+#[derive(Default)]
 pub struct Client {
     client: reqwest::Client,
 }
@@ -20,12 +25,6 @@ impl Client {
 
     pub fn inner(&self) -> &reqwest::Client {
         &self.client
-    }
-}
-
-impl Default for Client {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -71,26 +70,6 @@ impl Display for Config {
     }
 }
 
-#[derive(Parser)]
-pub enum Server {
-    Login(Login),
-    Profile(Profile),
-}
-
-#[derive(Parser, Serialize)]
-pub struct Login {
-    #[clap(short, long)]
-    identifier: String,
-    #[clap(short, long)]
-    password: String,
-}
-
-#[derive(Parser)]
-pub struct Profile {
-    #[clap(short, long)]
-    actor: String,
-}
-
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LoginResponse {
@@ -101,15 +80,12 @@ pub struct LoginResponse {
     refresh_jwt: String,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProfileResponse {
-    did: String,
-    handle: String,
-    display_name: Option<String>,
-    description: Option<String>,
-    avatar: Option<String>,
-    indexed_at: String,
+#[derive(Parser, Serialize)]
+pub struct Login {
+    #[clap(short, long)]
+    identifier: String,
+    #[clap(short, long)]
+    password: String,
 }
 
 impl Login {
@@ -135,55 +111,8 @@ impl Login {
     }
 }
 
-impl Profile {
-    pub async fn process(
-        &self,
-        client: &Client,
-        config: &Config,
-    ) -> anyhow::Result<ProfileResponse> {
-        let actor = self.actor.trim_start_matches('@');
-        let url = format!("{BASE_URL}/app.bsky.actor.getProfile");
-
-        let session = config
-            .session
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("Not logged in"))?;
-
-        let res = client
-            .inner()
-            .get(url)
-            .header("Authorization", format!("Bearer {}", session.access_jwt))
-            .query(&[("actor", actor)])
-            .send()
-            .await?;
-
-        match res.status() {
-            reqwest::StatusCode::OK => Ok(res.json().await?),
-            reqwest::StatusCode::UNAUTHORIZED => anyhow::bail!("Authentication required"),
-            reqwest::StatusCode::NOT_FOUND => anyhow::bail!("Profile not found"),
-            _ => {
-                let error = res.text().await?;
-                anyhow::bail!("Profile lookup failed: {}", error)
-            }
-        }
-    }
-}
-
-impl Display for ProfileResponse {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "DID: {}", self.did)?;
-        writeln!(f, "Handle: {}", self.handle)?;
-        if let Some(name) = &self.display_name {
-            writeln!(f, "Display Name: {}", name)?;
-        }
-        if let Some(desc) = &self.description {
-            writeln!(f, "Description: {}", desc)?;
-        }
-        write!(f, "Indexed At: {}", self.indexed_at)
-    }
-}
-
 #[derive(Parser)]
-struct Session;
-
-const BASE_URL: &str = "https://bsky.social/xrpc";
+pub enum Server {
+    Login(Login),
+    Profile(bsky::Profile),
+}
