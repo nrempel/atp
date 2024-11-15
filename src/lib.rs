@@ -31,7 +31,7 @@ impl Client {
     }
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Config {
     pub session: Option<LoginResponse>,
 }
@@ -66,7 +66,10 @@ impl Display for Config {
         if let Some(session) = &self.session {
             writeln!(f, "did: {}", session.did)?;
             writeln!(f, "handle: {}", session.handle)?;
-            write!(f, "email: {}", session.email)
+            if let Some(email) = &session.email {
+                writeln!(f, "email: {}", email)?;
+            }
+            write!(f, "")
         } else {
             write!(f, "No session")
         }
