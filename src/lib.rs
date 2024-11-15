@@ -118,4 +118,5 @@ pub enum Server {
     Profiles(bsky::Profiles),
     Preferences(bsky::Preferences),
     Suggestions(bsky::Suggestions),
+    SearchActors(bsky::SearchActors),
 }

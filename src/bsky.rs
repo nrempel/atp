@@ -28,6 +28,17 @@ pub struct Suggestions {
     cursor: Option<String>,
 }
 
+#[derive(Parser)]
+pub struct SearchActors {
+    #[clap(short, long)]
+    query: String,
+    #[clap(short, long)]
+    #[clap(default_value = "25")]
+    limit: u8,
+    #[clap(short, long)]
+    cursor: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProfileResponse {
@@ -78,6 +89,13 @@ pub struct ProfilesResponse {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SuggestionsResponse {
+    actors: Vec<ProfileResponse>,
+    cursor: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchActorsResponse {
     actors: Vec<ProfileResponse>,
     cursor: Option<String>,
 }
@@ -237,6 +255,21 @@ impl Display for SuggestionsResponse {
     }
 }
 
+impl Display for SearchActorsResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (i, profile) in self.actors.iter().enumerate() {
+            if i > 0 {
+                writeln!(f, "\n---\n")?;
+            }
+            write!(f, "{}", profile)?;
+        }
+        if let Some(cursor) = &self.cursor {
+            writeln!(f, "\n\nNext cursor: {}", cursor)?;
+        }
+        Ok(())
+    }
+}
+
 impl Profiles {
     pub async fn process(
         &self,
@@ -312,6 +345,44 @@ impl Suggestions {
             _ => {
                 let error = res.text().await?;
                 anyhow::bail!("Failed to get suggestions: {}", error)
+            }
+        }
+    }
+}
+
+impl SearchActors {
+    pub async fn process(
+        &self,
+        client: &Client,
+        config: &Config,
+    ) -> anyhow::Result<SearchActorsResponse> {
+        let url = format!("{}/app.bsky.actor.searchActors", super::BASE_URL);
+
+        let session = config
+            .session
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Not logged in"))?;
+
+        let mut query = vec![("q", self.query.clone()), ("limit", self.limit.to_string())];
+
+        if let Some(cursor) = &self.cursor {
+            query.push(("cursor", cursor.to_string()));
+        }
+
+        let res = client
+            .inner()
+            .get(url)
+            .header("Authorization", format!("Bearer {}", session.access_jwt))
+            .query(&query)
+            .send()
+            .await?;
+
+        match res.status() {
+            reqwest::StatusCode::OK => Ok(res.json().await?),
+            reqwest::StatusCode::UNAUTHORIZED => anyhow::bail!("Authentication required"),
+            _ => {
+                let error = res.text().await?;
+                anyhow::bail!("Search failed: {}", error)
             }
         }
     }
