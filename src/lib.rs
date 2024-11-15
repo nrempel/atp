@@ -42,6 +42,7 @@ impl Config {
         let mut file = tokio::fs::OpenOptions::new()
             .write(true)
             .create(true)
+            .truncate(true)
             .open(file)
             .await?;
 
