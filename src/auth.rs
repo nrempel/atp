@@ -78,8 +78,12 @@ pub(super) async fn make_authenticated_request<T: serde::de::DeserializeOwned>(
 
     let error_text = res.text().await?;
 
+    println!("Error: {}", error_text);
+    println!("Status: {}", status);
+
     // Check specifically for 401 status and ExpiredToken error
-    if status == reqwest::StatusCode::UNAUTHORIZED && error_text.contains("ExpiredToken") {
+    // TODO: do this more gracefully
+    if error_text.contains("ExpiredToken") {
         let new_session = refresh_session(client, &session.refresh_jwt).await?;
 
         let mut new_config = config.clone();

@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod bsky;
+pub mod format;
 
 use std::fmt::Display;
 
@@ -87,21 +88,36 @@ pub enum Server {
 
 #[async_trait]
 pub trait Process {
-    type Output: std::fmt::Display;
+    type Output: Send;
     async fn process(&self, client: &Client, config: &Config) -> anyhow::Result<Self::Output>;
 }
 
 #[async_trait]
 impl Process for Server {
-    type Output = Box<dyn std::fmt::Display>;
+    type Output = String;
 
     async fn process(&self, client: &Client, config: &Config) -> anyhow::Result<Self::Output> {
         match self {
-            Server::Profile(cmd) => Ok(Box::new(cmd.process(client, config).await?)),
-            Server::Profiles(cmd) => Ok(Box::new(cmd.process(client, config).await?)),
-            Server::Preferences(cmd) => Ok(Box::new(cmd.process(client, config).await?)),
-            Server::Suggestions(cmd) => Ok(Box::new(cmd.process(client, config).await?)),
-            Server::SearchActors(cmd) => Ok(Box::new(cmd.process(client, config).await?)),
+            Server::Profile(cmd) => {
+                let response = cmd.process(client, config).await?;
+                Ok(crate::format::format_profile(&response).await)
+            }
+            Server::Profiles(cmd) => {
+                let response = cmd.process(client, config).await?;
+                Ok(crate::format::format_profiles(&response).await)
+            }
+            Server::Preferences(cmd) => {
+                let response = cmd.process(client, config).await?;
+                Ok(crate::format::format_preferences(&response).await)
+            }
+            Server::Suggestions(cmd) => {
+                let response = cmd.process(client, config).await?;
+                Ok(crate::format::format_suggestions(&response).await)
+            }
+            Server::SearchActors(cmd) => {
+                let response = cmd.process(client, config).await?;
+                Ok(crate::format::format_search_actors(&response).await)
+            }
         }
     }
 }
