@@ -57,7 +57,6 @@ pub(super) async fn make_authenticated_request<T: serde::de::DeserializeOwned>(
     query: &[(&str, String)],
 ) -> anyhow::Result<T> {
     let url = format!("{}/app.bsky.actor.{}", super::BASE_URL, endpoint);
-
     let session = config
         .session
         .as_ref()
@@ -66,37 +65,35 @@ pub(super) async fn make_authenticated_request<T: serde::de::DeserializeOwned>(
     // First attempt with current access token
     let res = client
         .inner()
-        .get(url.clone())
+        .get(&url)
         .header("Authorization", format!("Bearer {}", session.access_jwt))
         .query(query)
         .send()
         .await?;
 
-    if res.status().is_success() {
+    let status = res.status();
+    if status.is_success() {
         return Ok(res.json().await?);
     }
 
-    // Check if token is expired
     let error_text = res.text().await?;
-    if error_text.contains("ExpiredToken") {
-        // Try to refresh the token
+
+    // Check specifically for 401 status and ExpiredToken error
+    if status == reqwest::StatusCode::UNAUTHORIZED && error_text.contains("ExpiredToken") {
         let new_session = refresh_session(client, &session.refresh_jwt).await?;
 
-        // Update the config with the new session
         let mut new_config = config.clone();
         new_config.session = Some(new_session);
         new_config
             .write(&directories::BaseDirs::new().unwrap())
             .await?;
 
-        // Retry the request with the new token
-
         let retry_res = client
             .inner()
-            .get(url)
+            .get(&url)
             .header(
                 "Authorization",
-                format!("Bearer {}", new_config.session.as_ref().unwrap().access_jwt),
+                format!("Bearer {}", new_config.session.unwrap().access_jwt),
             )
             .query(query)
             .send()
