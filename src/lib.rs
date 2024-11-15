@@ -1,3 +1,4 @@
+pub mod auth;
 pub mod bsky;
 
 use std::fmt::Display;
@@ -7,8 +8,9 @@ use async_trait::async_trait;
 use clap::Parser;
 use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use tokio::fs::read_to_string;
+
+use crate::auth::LoginResponse;
 
 const BASE_URL: &str = "https://bsky.social/xrpc";
 
@@ -71,61 +73,8 @@ impl Display for Config {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LoginResponse {
-    did: String,
-    handle: String,
-    email: String,
-    access_jwt: String,
-    refresh_jwt: String,
-}
-
-#[derive(Parser, Serialize)]
-pub struct Login {
-    #[clap(short, long)]
-    identifier: String,
-    #[clap(short, long)]
-    password: String,
-}
-
-impl Login {
-    pub async fn process(&self, client: &Client) -> anyhow::Result<LoginResponse> {
-        let identifier = self.identifier.trim_start_matches('@');
-        let url = format!("{BASE_URL}/com.atproto.server.createSession");
-        let res = client
-            .inner()
-            .post(url)
-            .json(&json!({
-                "identifier": identifier,
-                "password": self.password
-            }))
-            .send()
-            .await?;
-
-        if !res.status().is_success() {
-            let error = res.text().await?;
-            anyhow::bail!("Login failed: {}", error);
-        }
-
-        Ok(res.json().await?)
-    }
-}
-
-#[async_trait]
-pub trait Process {
-    type Output: std::fmt::Display;
-    async fn process(
-        &self,
-        client: &Client,
-        config: &Config,
-        base_dirs: &BaseDirs,
-    ) -> anyhow::Result<Self::Output>;
-}
-
 #[derive(Parser)]
 pub enum Server {
-    Login(Login),
     Profile(bsky::Profile),
     Profiles(bsky::Profiles),
     Preferences(bsky::Preferences),
@@ -134,24 +83,17 @@ pub enum Server {
 }
 
 #[async_trait]
+pub trait Process {
+    type Output: std::fmt::Display;
+    async fn process(&self, client: &Client, config: &Config) -> anyhow::Result<Self::Output>;
+}
+
+#[async_trait]
 impl Process for Server {
     type Output = Box<dyn std::fmt::Display>;
 
-    async fn process(
-        &self,
-        client: &Client,
-        config: &Config,
-        base_dirs: &BaseDirs,
-    ) -> anyhow::Result<Self::Output> {
+    async fn process(&self, client: &Client, config: &Config) -> anyhow::Result<Self::Output> {
         match self {
-            Server::Login(cmd) => {
-                let response = cmd.process(client).await?;
-                let config = Config {
-                    session: Some(response),
-                };
-                config.write(base_dirs).await?;
-                Ok(Box::new("Login successful"))
-            }
             Server::Profile(cmd) => Ok(Box::new(cmd.process(client, config).await?)),
             Server::Profiles(cmd) => Ok(Box::new(cmd.process(client, config).await?)),
             Server::Preferences(cmd) => Ok(Box::new(cmd.process(client, config).await?)),

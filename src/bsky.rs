@@ -1,9 +1,10 @@
 use std::fmt::Display;
 
+use async_trait::async_trait;
 use clap::Parser;
 use serde::Deserialize;
 
-use crate::{Client, Config};
+use crate::{Client, Config, Process};
 
 impl Profile {
     pub async fn process(
@@ -168,6 +169,21 @@ impl Display for SearchActorsResponse {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         format_paginated_response(f, self)
     }
+}
+
+#[derive(Parser)]
+pub enum Bsky {
+    #[command(subcommand)]
+    Actor(Actor),
+}
+
+#[derive(Parser)]
+pub enum Actor {
+    Profile(Profile),
+    Profiles(Profiles),
+    Preferences(Preferences),
+    Suggestions(Suggestions),
+    Search(SearchActors),
 }
 
 #[derive(Parser)]
@@ -336,4 +352,23 @@ fn format_paginated_response(
         writeln!(f, "\n\nNext cursor: {}", cursor)?;
     }
     Ok(())
+}
+
+#[async_trait]
+impl Process for Bsky {
+    type Output = Box<dyn std::fmt::Display>;
+
+    async fn process(&self, client: &Client, config: &Config) -> anyhow::Result<Self::Output> {
+        match self {
+            Bsky::Actor(Actor::Profile(cmd)) => Ok(Box::new(cmd.process(client, config).await?)),
+            Bsky::Actor(Actor::Profiles(cmd)) => Ok(Box::new(cmd.process(client, config).await?)),
+            Bsky::Actor(Actor::Preferences(cmd)) => {
+                Ok(Box::new(cmd.process(client, config).await?))
+            }
+            Bsky::Actor(Actor::Suggestions(cmd)) => {
+                Ok(Box::new(cmd.process(client, config).await?))
+            }
+            Bsky::Actor(Actor::Search(cmd)) => Ok(Box::new(cmd.process(client, config).await?)),
+        }
+    }
 }

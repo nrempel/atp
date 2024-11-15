@@ -1,4 +1,4 @@
-use atp::{Client, Config, Process, Server};
+use atp::{auth::Auth, bsky::Bsky, Client, Config, Process};
 use clap::Parser;
 use directories::BaseDirs;
 
@@ -9,17 +9,22 @@ async fn main() -> anyhow::Result<()> {
     let client = Client::new();
 
     match opts {
-        Options::Server(cmd) => {
-            let config = match cmd {
-                Server::Login(_) => Config::default(),
-                _ => Config::load(&base_dirs).await?,
+        Options::Auth(Auth::Login(cmd)) => {
+            let response = cmd.process(&client).await?;
+            let config = Config {
+                session: Some(response),
             };
-            let response = cmd.process(&client, &config, &base_dirs).await?;
-            println!("{response}");
+            config.write(&base_dirs).await?;
+            println!("Login successful");
         }
-        Options::Session => {
+        Options::Auth(Auth::Session) => {
             let config = Config::load(&base_dirs).await?;
             println!("{config}");
+        }
+        Options::Bsky(cmd) => {
+            let config = Config::load(&base_dirs).await?;
+            let response = cmd.process(&client, &config).await?;
+            println!("{response}");
         }
     }
     Ok(())
@@ -28,6 +33,7 @@ async fn main() -> anyhow::Result<()> {
 #[derive(Parser)]
 enum Options {
     #[command(subcommand)]
-    Server(Server),
-    Session,
+    Auth(Auth),
+    #[command(subcommand)]
+    Bsky(Bsky),
 }
