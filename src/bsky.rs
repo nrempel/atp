@@ -12,6 +12,13 @@ pub struct Profile {
 #[derive(Parser)]
 pub struct Preferences {}
 
+#[derive(Parser)]
+pub struct Profiles {
+    #[clap(short, long)]
+    #[clap(value_delimiter = ',')]
+    actors: Vec<String>,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProfileResponse {
@@ -38,15 +45,6 @@ pub struct PreferencesResponse {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Preference {
-    #[serde(rename = "$type")]
-    type_: String,
-    enabled: Option<bool>,
-    items: Option<Vec<String>>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct ViewerState {
     muted: Option<bool>,
     blocked_by: Option<bool>,
@@ -60,6 +58,12 @@ pub struct ViewerState {
 pub struct Label {
     val: String,
     src: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfilesResponse {
+    profiles: Vec<ProfileResponse>,
 }
 
 impl Profile {
@@ -187,5 +191,60 @@ impl Display for PreferencesResponse {
             "{}",
             serde_json::to_string_pretty(&self.preferences).unwrap()
         )
+    }
+}
+
+impl Display for ProfilesResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (i, profile) in self.profiles.iter().enumerate() {
+            if i > 0 {
+                writeln!(f, "\n---\n")?;
+            }
+            write!(f, "{}", profile)?;
+        }
+        Ok(())
+    }
+}
+
+impl Profiles {
+    pub async fn process(
+        &self,
+        client: &Client,
+        config: &Config,
+    ) -> anyhow::Result<ProfilesResponse> {
+        let actors: Vec<_> = self
+            .actors
+            .iter()
+            .map(|a| a.trim_start_matches('@'))
+            .collect();
+
+        let url = format!("{}/app.bsky.actor.getProfiles", super::BASE_URL);
+
+        let session = config
+            .session
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Not logged in"))?;
+
+        let query: Vec<(&str, String)> = actors
+            .iter()
+            .map(|actor| ("actors", actor.to_string()))
+            .collect();
+
+        let res = client
+            .inner()
+            .get(url)
+            .header("Authorization", format!("Bearer {}", session.access_jwt))
+            .query(&query)
+            .send()
+            .await?;
+
+        match res.status() {
+            reqwest::StatusCode::OK => Ok(res.json().await?),
+            reqwest::StatusCode::UNAUTHORIZED => anyhow::bail!("Authentication required"),
+            _ => {
+                let error = res.text().await?;
+                anyhow::bail!("Profiles lookup failed: {}", error)
+            }
+        }
     }
 }

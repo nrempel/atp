@@ -115,5 +115,6 @@ impl Login {
 pub enum Server {
     Login(Login),
     Profile(bsky::Profile),
+    Profiles(bsky::Profiles),
     Preferences(bsky::Preferences),
 }
