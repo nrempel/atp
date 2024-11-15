@@ -4,6 +4,7 @@ use anyhow::Ok;
 use clap::Parser;
 use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use tokio::fs::read_to_string;
 
 pub struct Client {
@@ -73,6 +74,7 @@ impl Display for Config {
 #[derive(Parser)]
 pub enum Server {
     Login(Login),
+    Profile(Profile),
 }
 
 #[derive(Parser, Serialize)]
@@ -81,6 +83,12 @@ pub struct Login {
     identifier: String,
     #[clap(short, long)]
     password: String,
+}
+
+#[derive(Parser)]
+pub struct Profile {
+    #[clap(short, long)]
+    actor: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -93,11 +101,85 @@ pub struct LoginResponse {
     refresh_jwt: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileResponse {
+    did: String,
+    handle: String,
+    display_name: Option<String>,
+    description: Option<String>,
+    avatar: Option<String>,
+    indexed_at: String,
+}
+
 impl Login {
     pub async fn process(&self, client: &Client) -> anyhow::Result<LoginResponse> {
+        let identifier = self.identifier.trim_start_matches('@');
         let url = format!("{BASE_URL}/com.atproto.server.createSession");
-        let res = client.inner().post(url).json(self).send().await?;
+        let res = client
+            .inner()
+            .post(url)
+            .json(&json!({
+                "identifier": identifier,
+                "password": self.password
+            }))
+            .send()
+            .await?;
+
+        if !res.status().is_success() {
+            let error = res.text().await?;
+            anyhow::bail!("Login failed: {}", error);
+        }
+
         Ok(res.json().await?)
+    }
+}
+
+impl Profile {
+    pub async fn process(
+        &self,
+        client: &Client,
+        config: &Config,
+    ) -> anyhow::Result<ProfileResponse> {
+        let actor = self.actor.trim_start_matches('@');
+        let url = format!("{BASE_URL}/app.bsky.actor.getProfile");
+
+        let session = config
+            .session
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Not logged in"))?;
+
+        let res = client
+            .inner()
+            .get(url)
+            .header("Authorization", format!("Bearer {}", session.access_jwt))
+            .query(&[("actor", actor)])
+            .send()
+            .await?;
+
+        match res.status() {
+            reqwest::StatusCode::OK => Ok(res.json().await?),
+            reqwest::StatusCode::UNAUTHORIZED => anyhow::bail!("Authentication required"),
+            reqwest::StatusCode::NOT_FOUND => anyhow::bail!("Profile not found"),
+            _ => {
+                let error = res.text().await?;
+                anyhow::bail!("Profile lookup failed: {}", error)
+            }
+        }
+    }
+}
+
+impl Display for ProfileResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "DID: {}", self.did)?;
+        writeln!(f, "Handle: {}", self.handle)?;
+        if let Some(name) = &self.display_name {
+            writeln!(f, "Display Name: {}", name)?;
+        }
+        if let Some(desc) = &self.description {
+            writeln!(f, "Description: {}", desc)?;
+        }
+        write!(f, "Indexed At: {}", self.indexed_at)
     }
 }
 

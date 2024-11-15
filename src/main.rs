@@ -17,6 +17,11 @@ async fn main() -> anyhow::Result<()> {
                 };
                 config.write(&base_dirs).await?;
             }
+            Server::Profile(profile) => {
+                let config = Config::load(&base_dirs).await?;
+                let response = profile.process(&client, &config).await?;
+                println!("{response}");
+            }
         },
         Options::Session => {
             let config = Config::load(&base_dirs).await?;
