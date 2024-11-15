@@ -32,6 +32,11 @@ async fn main() -> anyhow::Result<()> {
                 let response = profiles.process(&client, &config).await?;
                 println!("{response}");
             }
+            Server::Suggestions(suggestions) => {
+                let config = Config::load(&base_dirs).await?;
+                let response = suggestions.process(&client, &config).await?;
+                println!("{response}");
+            }
         },
         Options::Session => {
             let config = Config::load(&base_dirs).await?;
