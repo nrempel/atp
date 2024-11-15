@@ -1,7 +1,174 @@
-use crate::{Client, Config};
+use std::fmt::Display;
+
 use clap::Parser;
 use serde::Deserialize;
-use std::fmt::Display;
+
+use crate::{Client, Config};
+
+impl Profile {
+    pub async fn process(
+        &self,
+        client: &Client,
+        config: &Config,
+    ) -> anyhow::Result<ProfileResponse> {
+        let actor = self.actor.trim_start_matches('@');
+        make_authenticated_request(
+            client,
+            config,
+            "getProfile",
+            &[("actor", actor.to_string())],
+        )
+        .await
+    }
+}
+
+impl Preferences {
+    pub async fn process(
+        &self,
+        client: &Client,
+        config: &Config,
+    ) -> anyhow::Result<PreferencesResponse> {
+        make_authenticated_request(client, config, "getPreferences", &[]).await
+    }
+}
+
+impl Profiles {
+    pub async fn process(
+        &self,
+        client: &Client,
+        config: &Config,
+    ) -> anyhow::Result<ProfilesResponse> {
+        let actors: Vec<_> = self
+            .actors
+            .iter()
+            .map(|a| a.trim_start_matches('@'))
+            .collect();
+
+        let query: Vec<(&str, String)> = actors
+            .iter()
+            .map(|actor| ("actors", actor.to_string()))
+            .collect();
+
+        make_authenticated_request(client, config, "getProfiles", &query).await
+    }
+}
+
+impl Suggestions {
+    pub async fn process(
+        &self,
+        client: &Client,
+        config: &Config,
+    ) -> anyhow::Result<SuggestionsResponse> {
+        let mut query = vec![("limit", self.limit.to_string())];
+        if let Some(cursor) = &self.cursor {
+            query.push(("cursor", cursor.to_string()));
+        }
+
+        make_authenticated_request(client, config, "getSuggestions", &query).await
+    }
+}
+
+impl SearchActors {
+    pub async fn process(
+        &self,
+        client: &Client,
+        config: &Config,
+    ) -> anyhow::Result<SearchActorsResponse> {
+        let mut query = vec![("q", self.query.clone()), ("limit", self.limit.to_string())];
+        if let Some(cursor) = &self.cursor {
+            query.push(("cursor", cursor.to_string()));
+        }
+
+        make_authenticated_request(client, config, "searchActors", &query).await
+    }
+}
+
+impl Display for ProfileResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "DID: {}", self.did)?;
+        writeln!(f, "Handle: {}", self.handle)?;
+        if let Some(name) = &self.display_name {
+            writeln!(f, "Display Name: {}", name)?;
+        }
+        if let Some(desc) = &self.description {
+            writeln!(f, "Description: {}", desc)?;
+        }
+        if let Some(avatar) = &self.avatar {
+            writeln!(f, "Avatar: {}", avatar)?;
+        }
+        if let Some(banner) = &self.banner {
+            writeln!(f, "Banner: {}", banner)?;
+        }
+        if let Some(followers) = &self.followers_count {
+            writeln!(f, "Followers: {}", followers)?;
+        }
+        if let Some(follows) = &self.follows_count {
+            writeln!(f, "Following: {}", follows)?;
+        }
+        if let Some(posts) = &self.posts_count {
+            writeln!(f, "Posts: {}", posts)?;
+        }
+        if let Some(viewer) = &self.viewer {
+            writeln!(f, "\nViewer State:")?;
+            if let Some(muted) = viewer.muted {
+                writeln!(f, "  Muted: {}", muted)?;
+            }
+            if let Some(blocked_by) = viewer.blocked_by {
+                writeln!(f, "  Blocked by: {}", blocked_by)?;
+            }
+            if let Some(blocking) = viewer.blocking {
+                writeln!(f, "  Blocking: {}", blocking)?;
+            }
+            if let Some(following) = &viewer.following {
+                writeln!(f, "  Following: {}", following)?;
+            }
+            if let Some(followed_by) = &viewer.followed_by {
+                writeln!(f, "  Followed by: {}", followed_by)?;
+            }
+        }
+        if let Some(labels) = &self.labels {
+            writeln!(f, "\nLabels:")?;
+            for label in labels {
+                writeln!(f, "  {} (from: {})", label.val, label.src)?;
+            }
+        }
+        write!(f, "Indexed At: {}", self.indexed_at)
+    }
+}
+
+impl Display for PreferencesResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(
+            f,
+            "{}",
+            serde_json::to_string_pretty(&self.preferences).unwrap()
+        )
+    }
+}
+
+impl Display for ProfilesResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (i, profile) in self.profiles.iter().enumerate() {
+            if i > 0 {
+                writeln!(f, "\n---\n")?;
+            }
+            write!(f, "{}", profile)?;
+        }
+        Ok(())
+    }
+}
+
+impl Display for SuggestionsResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        format_paginated_response(f, self)
+    }
+}
+
+impl Display for SearchActorsResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        format_paginated_response(f, self)
+    }
+}
 
 #[derive(Parser)]
 pub struct Profile {
@@ -100,290 +267,73 @@ pub struct SearchActorsResponse {
     cursor: Option<String>,
 }
 
-impl Profile {
-    pub async fn process(
-        &self,
-        client: &Client,
-        config: &Config,
-    ) -> anyhow::Result<ProfileResponse> {
-        let actor = self.actor.trim_start_matches('@');
-        let url = format!("{}/app.bsky.actor.getProfile", super::BASE_URL);
+async fn make_authenticated_request<T: serde::de::DeserializeOwned>(
+    client: &Client,
+    config: &Config,
+    endpoint: &str,
+    query: &[(&str, String)],
+) -> anyhow::Result<T> {
+    let url = format!("{}/app.bsky.actor.{}", super::BASE_URL, endpoint);
 
-        let session = config
-            .session
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("Not logged in"))?;
+    let session = config
+        .session
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("Not logged in"))?;
 
-        let res = client
-            .inner()
-            .get(url)
-            .header("Authorization", format!("Bearer {}", session.access_jwt))
-            .query(&[("actor", actor)])
-            .send()
-            .await?;
+    let res = client
+        .inner()
+        .get(url)
+        .header("Authorization", format!("Bearer {}", session.access_jwt))
+        .query(query)
+        .send()
+        .await?;
 
-        match res.status() {
-            reqwest::StatusCode::OK => Ok(res.json().await?),
-            reqwest::StatusCode::UNAUTHORIZED => anyhow::bail!("Authentication required"),
-            reqwest::StatusCode::NOT_FOUND => anyhow::bail!("Profile not found"),
-            _ => {
-                let error = res.text().await?;
-                anyhow::bail!("Profile lookup failed: {}", error)
-            }
+    match res.status() {
+        reqwest::StatusCode::OK => Ok(res.json().await?),
+        reqwest::StatusCode::UNAUTHORIZED => anyhow::bail!("Authentication required"),
+        reqwest::StatusCode::NOT_FOUND => anyhow::bail!("Not found"),
+        _ => {
+            let error = res.text().await?;
+            anyhow::bail!("Request failed: {}", error)
         }
     }
 }
 
-impl Preferences {
-    pub async fn process(
-        &self,
-        client: &Client,
-        config: &Config,
-    ) -> anyhow::Result<PreferencesResponse> {
-        let url = format!("{}/app.bsky.actor.getPreferences", super::BASE_URL);
+trait PaginatedResponse: Display {
+    fn get_profiles(&self) -> &[ProfileResponse];
+    fn get_cursor(&self) -> Option<&String>;
+}
 
-        let session = config
-            .session
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("Not logged in"))?;
-
-        let res = client
-            .inner()
-            .get(url)
-            .header("Authorization", format!("Bearer {}", session.access_jwt))
-            .send()
-            .await?;
-
-        match res.status() {
-            reqwest::StatusCode::OK => Ok(res.json().await?),
-            reqwest::StatusCode::UNAUTHORIZED => anyhow::bail!("Authentication required"),
-            _ => {
-                let error = res.text().await?;
-                anyhow::bail!("Failed to get preferences: {}", error)
-            }
-        }
+impl PaginatedResponse for SuggestionsResponse {
+    fn get_profiles(&self) -> &[ProfileResponse] {
+        &self.actors
+    }
+    fn get_cursor(&self) -> Option<&String> {
+        self.cursor.as_ref()
     }
 }
 
-impl Display for ProfileResponse {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "DID: {}", self.did)?;
-        writeln!(f, "Handle: {}", self.handle)?;
-        if let Some(name) = &self.display_name {
-            writeln!(f, "Display Name: {}", name)?;
-        }
-        if let Some(desc) = &self.description {
-            writeln!(f, "Description: {}", desc)?;
-        }
-        if let Some(avatar) = &self.avatar {
-            writeln!(f, "Avatar: {}", avatar)?;
-        }
-        if let Some(banner) = &self.banner {
-            writeln!(f, "Banner: {}", banner)?;
-        }
-        if let Some(followers) = &self.followers_count {
-            writeln!(f, "Followers: {}", followers)?;
-        }
-        if let Some(follows) = &self.follows_count {
-            writeln!(f, "Following: {}", follows)?;
-        }
-        if let Some(posts) = &self.posts_count {
-            writeln!(f, "Posts: {}", posts)?;
-        }
-        if let Some(viewer) = &self.viewer {
-            writeln!(f, "\nViewer State:")?;
-            if let Some(muted) = viewer.muted {
-                writeln!(f, "  Muted: {}", muted)?;
-            }
-            if let Some(blocked_by) = viewer.blocked_by {
-                writeln!(f, "  Blocked by: {}", blocked_by)?;
-            }
-            if let Some(blocking) = viewer.blocking {
-                writeln!(f, "  Blocking: {}", blocking)?;
-            }
-            if let Some(following) = &viewer.following {
-                writeln!(f, "  Following: {}", following)?;
-            }
-            if let Some(followed_by) = &viewer.followed_by {
-                writeln!(f, "  Followed by: {}", followed_by)?;
-            }
-        }
-        if let Some(labels) = &self.labels {
-            writeln!(f, "\nLabels:")?;
-            for label in labels {
-                writeln!(f, "  {} (from: {})", label.val, label.src)?;
-            }
-        }
-        write!(f, "Indexed At: {}", self.indexed_at)
+impl PaginatedResponse for SearchActorsResponse {
+    fn get_profiles(&self) -> &[ProfileResponse] {
+        &self.actors
+    }
+    fn get_cursor(&self) -> Option<&String> {
+        self.cursor.as_ref()
     }
 }
 
-impl Display for PreferencesResponse {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(
-            f,
-            "{}",
-            serde_json::to_string_pretty(&self.preferences).unwrap()
-        )
+fn format_paginated_response(
+    f: &mut std::fmt::Formatter<'_>,
+    response: &impl PaginatedResponse,
+) -> std::fmt::Result {
+    for (i, profile) in response.get_profiles().iter().enumerate() {
+        if i > 0 {
+            writeln!(f, "\n---\n")?;
+        }
+        write!(f, "{}", profile)?;
     }
-}
-
-impl Display for ProfilesResponse {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (i, profile) in self.profiles.iter().enumerate() {
-            if i > 0 {
-                writeln!(f, "\n---\n")?;
-            }
-            write!(f, "{}", profile)?;
-        }
-        Ok(())
+    if let Some(cursor) = response.get_cursor() {
+        writeln!(f, "\n\nNext cursor: {}", cursor)?;
     }
-}
-
-impl Display for SuggestionsResponse {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (i, profile) in self.actors.iter().enumerate() {
-            if i > 0 {
-                writeln!(f, "\n---\n")?;
-            }
-            write!(f, "{}", profile)?;
-        }
-        if let Some(cursor) = &self.cursor {
-            writeln!(f, "\n\nNext cursor: {}", cursor)?;
-        }
-        Ok(())
-    }
-}
-
-impl Display for SearchActorsResponse {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (i, profile) in self.actors.iter().enumerate() {
-            if i > 0 {
-                writeln!(f, "\n---\n")?;
-            }
-            write!(f, "{}", profile)?;
-        }
-        if let Some(cursor) = &self.cursor {
-            writeln!(f, "\n\nNext cursor: {}", cursor)?;
-        }
-        Ok(())
-    }
-}
-
-impl Profiles {
-    pub async fn process(
-        &self,
-        client: &Client,
-        config: &Config,
-    ) -> anyhow::Result<ProfilesResponse> {
-        let actors: Vec<_> = self
-            .actors
-            .iter()
-            .map(|a| a.trim_start_matches('@'))
-            .collect();
-
-        let url = format!("{}/app.bsky.actor.getProfiles", super::BASE_URL);
-
-        let session = config
-            .session
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("Not logged in"))?;
-
-        let query: Vec<(&str, String)> = actors
-            .iter()
-            .map(|actor| ("actors", actor.to_string()))
-            .collect();
-
-        let res = client
-            .inner()
-            .get(url)
-            .header("Authorization", format!("Bearer {}", session.access_jwt))
-            .query(&query)
-            .send()
-            .await?;
-
-        match res.status() {
-            reqwest::StatusCode::OK => Ok(res.json().await?),
-            reqwest::StatusCode::UNAUTHORIZED => anyhow::bail!("Authentication required"),
-            _ => {
-                let error = res.text().await?;
-                anyhow::bail!("Profiles lookup failed: {}", error)
-            }
-        }
-    }
-}
-
-impl Suggestions {
-    pub async fn process(
-        &self,
-        client: &Client,
-        config: &Config,
-    ) -> anyhow::Result<SuggestionsResponse> {
-        let url = format!("{}/app.bsky.actor.getSuggestions", super::BASE_URL);
-
-        let session = config
-            .session
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("Not logged in"))?;
-
-        let mut query = vec![("limit", self.limit.to_string())];
-        if let Some(cursor) = &self.cursor {
-            query.push(("cursor", cursor.to_string()));
-        }
-
-        let res = client
-            .inner()
-            .get(url)
-            .header("Authorization", format!("Bearer {}", session.access_jwt))
-            .query(&query)
-            .send()
-            .await?;
-
-        match res.status() {
-            reqwest::StatusCode::OK => Ok(res.json().await?),
-            reqwest::StatusCode::UNAUTHORIZED => anyhow::bail!("Authentication required"),
-            _ => {
-                let error = res.text().await?;
-                anyhow::bail!("Failed to get suggestions: {}", error)
-            }
-        }
-    }
-}
-
-impl SearchActors {
-    pub async fn process(
-        &self,
-        client: &Client,
-        config: &Config,
-    ) -> anyhow::Result<SearchActorsResponse> {
-        let url = format!("{}/app.bsky.actor.searchActors", super::BASE_URL);
-
-        let session = config
-            .session
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("Not logged in"))?;
-
-        let mut query = vec![("q", self.query.clone()), ("limit", self.limit.to_string())];
-
-        if let Some(cursor) = &self.cursor {
-            query.push(("cursor", cursor.to_string()));
-        }
-
-        let res = client
-            .inner()
-            .get(url)
-            .header("Authorization", format!("Bearer {}", session.access_jwt))
-            .query(&query)
-            .send()
-            .await?;
-
-        match res.status() {
-            reqwest::StatusCode::OK => Ok(res.json().await?),
-            reqwest::StatusCode::UNAUTHORIZED => anyhow::bail!("Authentication required"),
-            _ => {
-                let error = res.text().await?;
-                anyhow::bail!("Search failed: {}", error)
-            }
-        }
-    }
+    Ok(())
 }
