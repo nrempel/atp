@@ -3,6 +3,7 @@ pub mod bsky;
 use std::fmt::Display;
 
 use anyhow::Ok;
+use async_trait::async_trait;
 use clap::Parser;
 use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
@@ -28,7 +29,7 @@ impl Client {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 pub struct Config {
     pub session: Option<LoginResponse>,
 }
@@ -111,6 +112,17 @@ impl Login {
     }
 }
 
+#[async_trait]
+pub trait Process {
+    type Output: std::fmt::Display;
+    async fn process(
+        &self,
+        client: &Client,
+        config: &Config,
+        base_dirs: &BaseDirs,
+    ) -> anyhow::Result<Self::Output>;
+}
+
 #[derive(Parser)]
 pub enum Server {
     Login(Login),
@@ -119,4 +131,32 @@ pub enum Server {
     Preferences(bsky::Preferences),
     Suggestions(bsky::Suggestions),
     SearchActors(bsky::SearchActors),
+}
+
+#[async_trait]
+impl Process for Server {
+    type Output = Box<dyn std::fmt::Display>;
+
+    async fn process(
+        &self,
+        client: &Client,
+        config: &Config,
+        base_dirs: &BaseDirs,
+    ) -> anyhow::Result<Self::Output> {
+        match self {
+            Server::Login(cmd) => {
+                let response = cmd.process(client).await?;
+                let config = Config {
+                    session: Some(response),
+                };
+                config.write(base_dirs).await?;
+                Ok(Box::new("Login successful"))
+            }
+            Server::Profile(cmd) => Ok(Box::new(cmd.process(client, config).await?)),
+            Server::Profiles(cmd) => Ok(Box::new(cmd.process(client, config).await?)),
+            Server::Preferences(cmd) => Ok(Box::new(cmd.process(client, config).await?)),
+            Server::Suggestions(cmd) => Ok(Box::new(cmd.process(client, config).await?)),
+            Server::SearchActors(cmd) => Ok(Box::new(cmd.process(client, config).await?)),
+        }
+    }
 }
