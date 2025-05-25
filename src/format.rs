@@ -6,7 +6,7 @@ use std::io::Write;
 use textwrap::fill;
 use viuer::Config as ViuerConfig;
 
-use crate::bsky::{
+use crate::bsky::actor::{
     Label, PreferencesResponse, ProfileResponse, ProfilesResponse, SearchActorsResponse,
     SuggestionsResponse, ViewerState,
 };

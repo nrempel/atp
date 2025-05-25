@@ -5,7 +5,7 @@ use serde::Deserialize;
 use crate::{auth::make_authenticated_request, format, Client, Config, Process};
 
 impl Profile {
-    pub(super) async fn process(
+    pub(crate) async fn process(
         &self,
         client: &Client,
         config: &Config,
@@ -22,7 +22,7 @@ impl Profile {
 }
 
 impl Preferences {
-    pub(super) async fn process(
+    pub(crate) async fn process(
         &self,
         client: &Client,
         config: &Config,
@@ -32,7 +32,7 @@ impl Preferences {
 }
 
 impl Profiles {
-    pub(super) async fn process(
+    pub(crate) async fn process(
         &self,
         client: &Client,
         config: &Config,
@@ -53,7 +53,7 @@ impl Profiles {
 }
 
 impl Suggestions {
-    pub(super) async fn process(
+    pub(crate) async fn process(
         &self,
         client: &Client,
         config: &Config,
@@ -68,7 +68,7 @@ impl Suggestions {
 }
 
 impl SearchActors {
-    pub(super) async fn process(
+    pub(crate) async fn process(
         &self,
         client: &Client,
         config: &Config,
@@ -135,64 +135,64 @@ pub struct SearchActors {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(super) struct ProfileResponse {
+pub(crate) struct ProfileResponse {
     #[allow(dead_code)]
-    pub(super) did: String,
-    pub(super) handle: String,
-    pub(super) display_name: Option<String>,
-    pub(super) description: Option<String>,
-    pub(super) avatar: Option<String>,
-    pub(super) banner: Option<String>,
-    pub(super) followers_count: Option<i64>,
-    pub(super) follows_count: Option<i64>,
-    pub(super) posts_count: Option<i64>,
-    pub(super) indexed_at: String,
-    pub(super) viewer: Option<ViewerState>,
-    pub(super) labels: Option<Vec<Label>>,
+    pub(crate) did: String,
+    pub(crate) handle: String,
+    pub(crate) display_name: Option<String>,
+    pub(crate) description: Option<String>,
+    pub(crate) avatar: Option<String>,
+    pub(crate) banner: Option<String>,
+    pub(crate) followers_count: Option<i64>,
+    pub(crate) follows_count: Option<i64>,
+    pub(crate) posts_count: Option<i64>,
+    pub(crate) indexed_at: String,
+    pub(crate) viewer: Option<ViewerState>,
+    pub(crate) labels: Option<Vec<Label>>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(super) struct PreferencesResponse {
-    pub(super) preferences: serde_json::Value,
+pub(crate) struct PreferencesResponse {
+    pub(crate) preferences: serde_json::Value,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(super) struct ViewerState {
-    pub(super) muted: Option<bool>,
-    pub(super) blocked_by: Option<bool>,
-    pub(super) blocking: Option<bool>,
-    pub(super) following: Option<bool>,
-    pub(super) followed_by: Option<bool>,
+pub(crate) struct ViewerState {
+    pub(crate) muted: Option<bool>,
+    pub(crate) blocked_by: Option<bool>,
+    pub(crate) blocking: Option<bool>,
+    pub(crate) following: Option<bool>,
+    pub(crate) followed_by: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(super) struct Label {
-    pub(super) val: String,
+pub(crate) struct Label {
+    pub(crate) val: String,
     #[allow(dead_code)]
-    pub(super) src: String,
+    pub(crate) src: String,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(super) struct ProfilesResponse {
-    pub(super) profiles: Vec<ProfileResponse>,
+pub(crate) struct ProfilesResponse {
+    pub(crate) profiles: Vec<ProfileResponse>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(super) struct SuggestionsResponse {
-    pub(super) actors: Vec<ProfileResponse>,
-    pub(super) cursor: Option<String>,
+pub(crate) struct SuggestionsResponse {
+    pub(crate) actors: Vec<ProfileResponse>,
+    pub(crate) cursor: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(super) struct SearchActorsResponse {
-    pub(super) actors: Vec<ProfileResponse>,
-    pub(super) cursor: Option<String>,
+pub(crate) struct SearchActorsResponse {
+    pub(crate) actors: Vec<ProfileResponse>,
+    pub(crate) cursor: Option<String>,
 }
 
 #[async_trait]

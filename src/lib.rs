@@ -79,11 +79,11 @@ impl Display for Config {
 
 #[derive(Parser)]
 pub enum Server {
-    Profile(bsky::Profile),
-    Profiles(bsky::Profiles),
-    Preferences(bsky::Preferences),
-    Suggestions(bsky::Suggestions),
-    SearchActors(bsky::SearchActors),
+    Profile(bsky::actor::Profile),
+    Profiles(bsky::actor::Profiles),
+    Preferences(bsky::actor::Preferences),
+    Suggestions(bsky::actor::Suggestions),
+    SearchActors(bsky::actor::SearchActors),
 }
 
 #[async_trait]

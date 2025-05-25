@@ -1,4 +1,4 @@
-use atp::{auth::Auth, bsky::Bsky, Client, Config, Process};
+use atp::{auth::Auth, bsky::actor::Bsky, Client, Config, Process};
 use clap::Parser;
 use directories::BaseDirs;
 
