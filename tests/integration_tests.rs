@@ -544,4 +544,124 @@ fn test_repo_get_record_nonexistent() {
     );
 }
 
-// TODO: com.atproto.repo.listRecords tests will go here
+#[test]
+fn test_repo_list_records_success() {
+    let output = atp_command()
+        .args(&[
+            "atproto",
+            "repo",
+            "list-records",
+            "--repo",
+            "bsky.app",
+            "--collection",
+            "app.bsky.feed.post",
+            "--limit",
+            "3",
+        ])
+        .output()
+        .expect("Failed to execute list-records");
+
+    assert!(output.status.success(), "Command should succeed");
+    let stdout = String::from_utf8(output.stdout).unwrap();
+
+    // Should return record list
+    assert!(stdout.contains("Found"), "Should show found count");
+    assert!(stdout.contains("records:"), "Should show records label");
+    assert!(stdout.contains("at://"), "Should show AT URIs");
+    assert!(stdout.contains("bafyre"), "Should show CIDs");
+}
+
+#[test]
+fn test_repo_list_records_missing_repo() {
+    let output = atp_command()
+        .args(&[
+            "atproto",
+            "repo",
+            "list-records",
+            "--collection",
+            "app.bsky.feed.post",
+        ])
+        .output()
+        .expect("Failed to execute list-records");
+
+    assert!(!output.status.success(), "Command should fail without repo");
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("repo") || stderr.contains("required"),
+        "Should show missing repo error"
+    );
+}
+
+#[test]
+fn test_repo_list_records_missing_collection() {
+    let output = atp_command()
+        .args(&["atproto", "repo", "list-records", "--repo", "bsky.app"])
+        .output()
+        .expect("Failed to execute list-records");
+
+    assert!(
+        !output.status.success(),
+        "Command should fail without collection"
+    );
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("collection") || stderr.contains("required"),
+        "Should show missing collection error"
+    );
+}
+
+#[test]
+fn test_repo_list_records_empty_collection() {
+    let output = atp_command()
+        .args(&[
+            "atproto",
+            "repo",
+            "list-records",
+            "--repo",
+            "bsky.app",
+            "--collection",
+            "app.bsky.nonexistent.collection",
+        ])
+        .output()
+        .expect("Failed to execute list-records");
+
+    assert!(
+        output.status.success(),
+        "Command should succeed for empty collection"
+    );
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(
+        stdout.contains("Found 0 records:"),
+        "Should show zero records"
+    );
+}
+
+#[test]
+fn test_repo_list_records_with_limit() {
+    let output = atp_command()
+        .args(&[
+            "atproto",
+            "repo",
+            "list-records",
+            "--repo",
+            "bsky.app",
+            "--collection",
+            "app.bsky.feed.post",
+            "--limit",
+            "2",
+        ])
+        .output()
+        .expect("Failed to execute list-records");
+
+    assert!(output.status.success(), "Command should succeed");
+    let stdout = String::from_utf8(output.stdout).unwrap();
+
+    // Should respect limit
+    let lines: Vec<&str> = stdout
+        .lines()
+        .filter(|line| line.contains("at://"))
+        .collect();
+    assert!(lines.len() <= 2, "Should not exceed limit of 2 records");
+}
+
+// TODO: com.atproto.repo.deleteRecord tests will go here
