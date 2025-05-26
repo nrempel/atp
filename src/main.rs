@@ -1,4 +1,4 @@
-use atp::{Client, Config, Process, auth::Auth, bsky::actor::Bsky};
+use atp::{Client, Config, Process, atproto::Atproto, auth::Auth, bsky::actor::Bsky};
 use clap::Parser;
 use directories::BaseDirs;
 
@@ -26,6 +26,11 @@ async fn main() -> anyhow::Result<()> {
             let response = cmd.process(&client, &config).await?;
             println!("{response}");
         }
+        Options::Atproto(cmd) => {
+            let config = Config::load(&base_dirs).await?;
+            let response = cmd.process(&client, &config).await?;
+            println!("{response}");
+        }
     }
     Ok(())
 }
@@ -37,4 +42,6 @@ enum Options {
     Auth(Auth),
     #[command(subcommand)]
     Bsky(Bsky),
+    #[command(subcommand)]
+    Atproto(Atproto),
 }

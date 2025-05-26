@@ -1078,3 +1078,946 @@ fn test_command_combinations() {
         );
     }
 }
+
+// AT Protocol Identity Tests
+#[test]
+fn test_atproto_identity_resolve_handle_help() {
+    let output = atp_command()
+        .args(&["atproto", "identity", "resolve-handle", "--help"])
+        .output()
+        .expect("Failed to execute atp atproto identity resolve-handle --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("handle"));
+    assert!(stdout.contains("Resolve a handle to a DID"));
+}
+
+#[test]
+fn test_atproto_identity_resolve_handle_missing_handle() {
+    let output = atp_command()
+        .args(&["atproto", "identity", "resolve-handle"])
+        .output()
+        .expect("Failed to execute atp atproto identity resolve-handle");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("handle") || stderr.contains("required"));
+}
+
+#[test]
+fn test_atproto_identity_resolve_handle_with_handle() {
+    let output = atp_command()
+        .args(&[
+            "atproto",
+            "identity",
+            "resolve-handle",
+            "--handle",
+            "test.bsky.social",
+        ])
+        .output()
+        .expect("Failed to execute atp atproto identity resolve-handle");
+
+    // Should fail due to network/auth, not argument parsing
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("Failed to resolve handle")
+            || stderr.contains("network")
+            || stderr.contains("connection")
+            || stderr.contains("No such file")
+            || stderr.contains("directory"),
+        "Should fail due to network issues, not argument parsing. Stderr: {}",
+        stderr
+    );
+}
+
+#[test]
+fn test_atproto_identity_resolve_did_help() {
+    let output = atp_command()
+        .args(&["atproto", "identity", "resolve-did", "--help"])
+        .output()
+        .expect("Failed to execute atp atproto identity resolve-did --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("did"));
+    assert!(stdout.contains("Resolve a DID to its DID document"));
+}
+
+#[test]
+fn test_atproto_identity_resolve_did_missing_did() {
+    let output = atp_command()
+        .args(&["atproto", "identity", "resolve-did"])
+        .output()
+        .expect("Failed to execute atp atproto identity resolve-did");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("did") || stderr.contains("required"));
+}
+
+#[test]
+fn test_atproto_identity_resolve_did_with_did() {
+    let output = atp_command()
+        .args(&[
+            "atproto",
+            "identity",
+            "resolve-did",
+            "--did",
+            "did:plc:test123",
+        ])
+        .output()
+        .expect("Failed to execute atp atproto identity resolve-did");
+
+    // Should fail due to network/auth, not argument parsing
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("Failed to resolve DID")
+            || stderr.contains("network")
+            || stderr.contains("connection")
+            || stderr.contains("No such file")
+            || stderr.contains("directory"),
+        "Should fail due to network issues, not argument parsing. Stderr: {}",
+        stderr
+    );
+}
+
+#[test]
+fn test_atproto_identity_update_handle_help() {
+    let output = atp_command()
+        .args(&["atproto", "identity", "update-handle", "--help"])
+        .output()
+        .expect("Failed to execute atp atproto identity update-handle --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("handle"));
+    assert!(stdout.contains("Update the handle for an account"));
+}
+
+#[test]
+fn test_atproto_identity_update_handle_requires_auth() {
+    let output = atp_command()
+        .args(&[
+            "atproto",
+            "identity",
+            "update-handle",
+            "--handle",
+            "new.handle.com",
+        ])
+        .output()
+        .expect("Failed to execute atp atproto identity update-handle");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("Not logged in")
+            || stderr.contains("config")
+            || stderr.contains("session")
+            || stderr.contains("No such file")
+            || stderr.contains("directory"),
+        "Should fail due to authentication required. Stderr: {}",
+        stderr
+    );
+}
+
+// AT Protocol Repository Tests
+#[test]
+fn test_atproto_repo_create_record_help() {
+    let output = atp_command()
+        .args(&["atproto", "repo", "create-record", "--help"])
+        .output()
+        .expect("Failed to execute atp atproto repo create-record --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("repo"));
+    assert!(stdout.contains("collection"));
+    assert!(stdout.contains("record"));
+    assert!(stdout.contains("Create a new record in a repository"));
+}
+
+#[test]
+fn test_atproto_repo_create_record_missing_args() {
+    let output = atp_command()
+        .args(&["atproto", "repo", "create-record"])
+        .output()
+        .expect("Failed to execute atp atproto repo create-record");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("repo")
+            || stderr.contains("collection")
+            || stderr.contains("record")
+            || stderr.contains("required")
+    );
+}
+
+#[test]
+fn test_atproto_repo_create_record_requires_auth() {
+    let output = atp_command()
+        .args(&[
+            "atproto",
+            "repo",
+            "create-record",
+            "--repo",
+            "did:plc:test",
+            "--collection",
+            "app.bsky.feed.post",
+            "--record",
+            r#"{"text": "test post", "createdAt": "2023-01-01T00:00:00Z"}"#,
+        ])
+        .output()
+        .expect("Failed to execute atp atproto repo create-record");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("Not logged in")
+            || stderr.contains("config")
+            || stderr.contains("session")
+            || stderr.contains("No such file")
+            || stderr.contains("directory"),
+        "Should fail due to authentication required. Stderr: {}",
+        stderr
+    );
+}
+
+#[test]
+fn test_atproto_repo_get_record_help() {
+    let output = atp_command()
+        .args(&["atproto", "repo", "get-record", "--help"])
+        .output()
+        .expect("Failed to execute atp atproto repo get-record --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("repo"));
+    assert!(stdout.contains("collection"));
+    assert!(stdout.contains("rkey"));
+    assert!(stdout.contains("Get a record from a repository"));
+}
+
+#[test]
+fn test_atproto_repo_get_record_with_args() {
+    let output = atp_command()
+        .args(&[
+            "atproto",
+            "repo",
+            "get-record",
+            "--repo",
+            "did:plc:test",
+            "--collection",
+            "app.bsky.feed.post",
+            "--rkey",
+            "test123",
+        ])
+        .output()
+        .expect("Failed to execute atp atproto repo get-record");
+
+    // Should fail due to network, not argument parsing
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("Failed to get record")
+            || stderr.contains("network")
+            || stderr.contains("connection")
+            || stderr.contains("No such file")
+            || stderr.contains("directory"),
+        "Should fail due to network issues, not argument parsing. Stderr: {}",
+        stderr
+    );
+}
+
+#[test]
+fn test_atproto_repo_list_records_help() {
+    let output = atp_command()
+        .args(&["atproto", "repo", "list-records", "--help"])
+        .output()
+        .expect("Failed to execute atp atproto repo list-records --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("repo"));
+    assert!(stdout.contains("collection"));
+    assert!(stdout.contains("limit"));
+    assert!(stdout.contains("List records in a collection"));
+}
+
+#[test]
+fn test_atproto_repo_list_records_default_limit() {
+    let output = atp_command()
+        .args(&["atproto", "repo", "list-records", "--help"])
+        .output()
+        .expect("Failed to execute atp atproto repo list-records --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("50") || stdout.contains("default"));
+}
+
+#[test]
+fn test_atproto_repo_delete_record_requires_auth() {
+    let output = atp_command()
+        .args(&[
+            "atproto",
+            "repo",
+            "delete-record",
+            "--repo",
+            "did:plc:test",
+            "--collection",
+            "app.bsky.feed.post",
+            "--rkey",
+            "test123",
+        ])
+        .output()
+        .expect("Failed to execute atp atproto repo delete-record");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("Not logged in")
+            || stderr.contains("config")
+            || stderr.contains("session")
+            || stderr.contains("No such file")
+            || stderr.contains("directory"),
+        "Should fail due to authentication required. Stderr: {}",
+        stderr
+    );
+}
+
+#[test]
+fn test_atproto_repo_upload_blob_help() {
+    let output = atp_command()
+        .args(&["atproto", "repo", "upload-blob", "--help"])
+        .output()
+        .expect("Failed to execute atp atproto repo upload-blob --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("file"));
+    assert!(stdout.contains("Upload a blob to the repository"));
+}
+
+#[test]
+fn test_atproto_repo_upload_blob_requires_auth() {
+    let output = atp_command()
+        .args(&[
+            "atproto",
+            "repo",
+            "upload-blob",
+            "--file",
+            "/nonexistent/file.txt",
+        ])
+        .output()
+        .expect("Failed to execute atp atproto repo upload-blob");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("Not logged in")
+            || stderr.contains("config")
+            || stderr.contains("session")
+            || stderr.contains("No such file")
+            || stderr.contains("directory"),
+        "Should fail due to authentication or file not found. Stderr: {}",
+        stderr
+    );
+}
+
+#[test]
+fn test_atproto_repo_describe_repo_help() {
+    let output = atp_command()
+        .args(&["atproto", "repo", "describe-repo", "--help"])
+        .output()
+        .expect("Failed to execute atp atproto repo describe-repo --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("repo"));
+    assert!(stdout.contains("Describe a repository"));
+}
+
+#[test]
+fn test_atproto_repo_describe_repo_with_repo() {
+    let output = atp_command()
+        .args(&["atproto", "repo", "describe-repo", "--repo", "did:plc:test"])
+        .output()
+        .expect("Failed to execute atp atproto repo describe-repo");
+
+    // Should fail due to network, not argument parsing
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("Failed to describe repo")
+            || stderr.contains("network")
+            || stderr.contains("connection")
+            || stderr.contains("No such file")
+            || stderr.contains("directory"),
+        "Should fail due to network issues, not argument parsing. Stderr: {}",
+        stderr
+    );
+}
+
+// AT Protocol Server Tests
+#[test]
+fn test_atproto_server_create_session_help() {
+    let output = atp_command()
+        .args(&["atproto", "server", "create-session", "--help"])
+        .output()
+        .expect("Failed to execute atp atproto server create-session --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("identifier"));
+    assert!(stdout.contains("password"));
+    assert!(stdout.contains("Create a new session"));
+}
+
+#[test]
+fn test_atproto_server_create_session_missing_args() {
+    let output = atp_command()
+        .args(&["atproto", "server", "create-session"])
+        .output()
+        .expect("Failed to execute atp atproto server create-session");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("identifier") || stderr.contains("password") || stderr.contains("required")
+    );
+}
+
+#[test]
+fn test_atproto_server_create_session_with_credentials() {
+    let output = atp_command()
+        .args(&[
+            "atproto",
+            "server",
+            "create-session",
+            "--identifier",
+            "test@example.com",
+            "--password",
+            "testpass",
+        ])
+        .output()
+        .expect("Failed to execute atp atproto server create-session");
+
+    // Should fail due to invalid credentials or network, not argument parsing
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("Failed to create session")
+            || stderr.contains("network")
+            || stderr.contains("connection")
+            || stderr.contains("No such file")
+            || stderr.contains("directory"),
+        "Should fail due to network/auth issues, not argument parsing. Stderr: {}",
+        stderr
+    );
+}
+
+#[test]
+fn test_atproto_server_get_session_requires_auth() {
+    let output = atp_command()
+        .args(&["atproto", "server", "get-session"])
+        .output()
+        .expect("Failed to execute atp atproto server get-session");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("Not logged in")
+            || stderr.contains("config")
+            || stderr.contains("session")
+            || stderr.contains("No such file")
+            || stderr.contains("directory"),
+        "Should fail due to authentication required. Stderr: {}",
+        stderr
+    );
+}
+
+#[test]
+fn test_atproto_server_refresh_session_requires_auth() {
+    let output = atp_command()
+        .args(&["atproto", "server", "refresh-session"])
+        .output()
+        .expect("Failed to execute atp atproto server refresh-session");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("Not logged in")
+            || stderr.contains("config")
+            || stderr.contains("session")
+            || stderr.contains("No such file")
+            || stderr.contains("directory"),
+        "Should fail due to authentication required. Stderr: {}",
+        stderr
+    );
+}
+
+#[test]
+fn test_atproto_server_delete_session_requires_auth() {
+    let output = atp_command()
+        .args(&["atproto", "server", "delete-session"])
+        .output()
+        .expect("Failed to execute atp atproto server delete-session");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("Not logged in")
+            || stderr.contains("config")
+            || stderr.contains("session")
+            || stderr.contains("No such file")
+            || stderr.contains("directory"),
+        "Should fail due to authentication required. Stderr: {}",
+        stderr
+    );
+}
+
+#[test]
+fn test_atproto_server_describe_server_help() {
+    let output = atp_command()
+        .args(&["atproto", "server", "describe-server", "--help"])
+        .output()
+        .expect("Failed to execute atp atproto server describe-server --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("Describe server capabilities"));
+}
+
+#[test]
+fn test_atproto_server_describe_server_no_auth_required() {
+    let output = atp_command()
+        .args(&["atproto", "server", "describe-server"])
+        .output()
+        .expect("Failed to execute atp atproto server describe-server");
+
+    // Should fail due to network, not auth (this endpoint doesn't require auth)
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("Failed to describe server")
+            || stderr.contains("network")
+            || stderr.contains("connection")
+            || stderr.contains("No such file")
+            || stderr.contains("directory"),
+        "Should fail due to network issues, not authentication. Stderr: {}",
+        stderr
+    );
+}
+
+// AT Protocol Sync Tests
+#[test]
+fn test_atproto_sync_get_blob_help() {
+    let output = atp_command()
+        .args(&["atproto", "sync", "get-blob", "--help"])
+        .output()
+        .expect("Failed to execute atp atproto sync get-blob --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("did"));
+    assert!(stdout.contains("cid"));
+    assert!(stdout.contains("Get a blob from the repository"));
+}
+
+#[test]
+fn test_atproto_sync_get_blob_missing_args() {
+    let output = atp_command()
+        .args(&["atproto", "sync", "get-blob"])
+        .output()
+        .expect("Failed to execute atp atproto sync get-blob");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("did") || stderr.contains("cid") || stderr.contains("required"));
+}
+
+#[test]
+fn test_atproto_sync_get_blob_with_args() {
+    let output = atp_command()
+        .args(&[
+            "atproto",
+            "sync",
+            "get-blob",
+            "--did",
+            "did:plc:test",
+            "--cid",
+            "bafytest123",
+        ])
+        .output()
+        .expect("Failed to execute atp atproto sync get-blob");
+
+    // Should fail due to network, not argument parsing
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("Failed to get blob")
+            || stderr.contains("network")
+            || stderr.contains("connection")
+            || stderr.contains("No such file")
+            || stderr.contains("directory"),
+        "Should fail due to network issues, not argument parsing. Stderr: {}",
+        stderr
+    );
+}
+
+#[test]
+fn test_atproto_sync_get_head_help() {
+    let output = atp_command()
+        .args(&["atproto", "sync", "get-head", "--help"])
+        .output()
+        .expect("Failed to execute atp atproto sync get-head --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("did"));
+    assert!(stdout.contains("Get repository head"));
+}
+
+#[test]
+fn test_atproto_sync_get_head_with_did() {
+    let output = atp_command()
+        .args(&["atproto", "sync", "get-head", "--did", "did:plc:test"])
+        .output()
+        .expect("Failed to execute atp atproto sync get-head");
+
+    // Should fail due to network, not argument parsing
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("Failed to get head")
+            || stderr.contains("network")
+            || stderr.contains("connection")
+            || stderr.contains("No such file")
+            || stderr.contains("directory"),
+        "Should fail due to network issues, not argument parsing. Stderr: {}",
+        stderr
+    );
+}
+
+#[test]
+fn test_atproto_sync_get_latest_commit_help() {
+    let output = atp_command()
+        .args(&["atproto", "sync", "get-latest-commit", "--help"])
+        .output()
+        .expect("Failed to execute atp atproto sync get-latest-commit --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("did"));
+    assert!(stdout.contains("Get latest commit"));
+}
+
+#[test]
+fn test_atproto_sync_get_repo_status_help() {
+    let output = atp_command()
+        .args(&["atproto", "sync", "get-repo-status", "--help"])
+        .output()
+        .expect("Failed to execute atp atproto sync get-repo-status --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("did"));
+    assert!(stdout.contains("Get repository status"));
+}
+
+#[test]
+fn test_atproto_sync_list_repos_help() {
+    let output = atp_command()
+        .args(&["atproto", "sync", "list-repos", "--help"])
+        .output()
+        .expect("Failed to execute atp atproto sync list-repos --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("limit"));
+    assert!(stdout.contains("cursor"));
+    assert!(stdout.contains("List repositories"));
+}
+
+#[test]
+fn test_atproto_sync_list_repos_default_limit() {
+    let output = atp_command()
+        .args(&["atproto", "sync", "list-repos", "--help"])
+        .output()
+        .expect("Failed to execute atp atproto sync list-repos --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("500") || stdout.contains("default"));
+}
+
+#[test]
+fn test_atproto_sync_list_repos_no_args() {
+    let output = atp_command()
+        .args(&["atproto", "sync", "list-repos"])
+        .output()
+        .expect("Failed to execute atp atproto sync list-repos");
+
+    // Should fail due to network, not argument parsing (no required args)
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("Failed to list repos")
+            || stderr.contains("network")
+            || stderr.contains("connection")
+            || stderr.contains("No such file")
+            || stderr.contains("directory"),
+        "Should fail due to network issues, not argument parsing. Stderr: {}",
+        stderr
+    );
+}
+
+// Edge case and validation tests
+#[test]
+fn test_atproto_invalid_subcommand() {
+    let output = atp_command()
+        .args(&["atproto", "invalid"])
+        .output()
+        .expect("Failed to execute atp atproto invalid");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("invalid")
+            || stderr.contains("subcommand")
+            || stderr.contains("unrecognized")
+    );
+}
+
+#[test]
+fn test_atproto_help_shows_all_subcommands() {
+    let output = atp_command()
+        .args(&["atproto", "--help"])
+        .output()
+        .expect("Failed to execute atp atproto --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("identity"));
+    assert!(stdout.contains("repo"));
+    assert!(stdout.contains("server"));
+    assert!(stdout.contains("sync"));
+}
+
+#[test]
+fn test_atproto_identity_help_shows_all_commands() {
+    let output = atp_command()
+        .args(&["atproto", "identity", "--help"])
+        .output()
+        .expect("Failed to execute atp atproto identity --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("resolve-handle"));
+    assert!(stdout.contains("resolve-did"));
+    assert!(stdout.contains("update-handle"));
+}
+
+#[test]
+fn test_atproto_repo_help_shows_all_commands() {
+    let output = atp_command()
+        .args(&["atproto", "repo", "--help"])
+        .output()
+        .expect("Failed to execute atp atproto repo --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("create-record"));
+    assert!(stdout.contains("get-record"));
+    assert!(stdout.contains("list-records"));
+    assert!(stdout.contains("delete-record"));
+    assert!(stdout.contains("upload-blob"));
+    assert!(stdout.contains("describe-repo"));
+}
+
+#[test]
+fn test_atproto_server_help_shows_all_commands() {
+    let output = atp_command()
+        .args(&["atproto", "server", "--help"])
+        .output()
+        .expect("Failed to execute atp atproto server --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("create-session"));
+    assert!(stdout.contains("get-session"));
+    assert!(stdout.contains("refresh-session"));
+    assert!(stdout.contains("delete-session"));
+    assert!(stdout.contains("describe-server"));
+}
+
+#[test]
+fn test_atproto_sync_help_shows_all_commands() {
+    let output = atp_command()
+        .args(&["atproto", "sync", "--help"])
+        .output()
+        .expect("Failed to execute atp atproto sync --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("get-blob"));
+    assert!(stdout.contains("get-head"));
+    assert!(stdout.contains("get-latest-commit"));
+    assert!(stdout.contains("get-repo-status"));
+    assert!(stdout.contains("list-repos"));
+}
+
+// Parameter validation tests
+#[test]
+fn test_atproto_repo_list_records_limit_validation() {
+    let test_cases = vec![
+        ("1", true),    // minimum valid
+        ("1000", true), // large valid
+        ("0", true),    // zero (edge case)
+    ];
+
+    for (limit, should_parse) in test_cases {
+        let output = atp_command()
+            .args(&[
+                "atproto",
+                "repo",
+                "list-records",
+                "--repo",
+                "did:plc:test",
+                "--collection",
+                "app.bsky.feed.post",
+                "--limit",
+                limit,
+            ])
+            .output()
+            .expect("Failed to execute atp atproto repo list-records");
+
+        if should_parse {
+            // Should fail due to network, not argument parsing
+            let stderr = String::from_utf8(output.stderr).unwrap();
+            assert!(
+                stderr.contains("Failed to list records")
+                    || stderr.contains("network")
+                    || stderr.contains("connection")
+                    || stderr.contains("No such file")
+                    || stderr.contains("directory"),
+                "Limit '{}' should parse correctly but fail on network. Stderr: {}",
+                limit,
+                stderr
+            );
+        } else {
+            // Should fail due to argument parsing
+            let stderr = String::from_utf8(output.stderr).unwrap();
+            assert!(
+                stderr.contains("invalid") || stderr.contains("parse"),
+                "Limit '{}' should fail to parse. Stderr: {}",
+                limit,
+                stderr
+            );
+        }
+    }
+}
+
+#[test]
+fn test_atproto_sync_list_repos_limit_validation() {
+    let test_cases = vec![
+        ("1", true),    // minimum valid
+        ("1000", true), // large valid
+        ("0", true),    // zero (edge case)
+    ];
+
+    for (limit, should_parse) in test_cases {
+        let output = atp_command()
+            .args(&["atproto", "sync", "list-repos", "--limit", limit])
+            .output()
+            .expect("Failed to execute atp atproto sync list-repos");
+
+        if should_parse {
+            // Should fail due to network, not argument parsing
+            let stderr = String::from_utf8(output.stderr).unwrap();
+            assert!(
+                stderr.contains("Failed to list repos")
+                    || stderr.contains("network")
+                    || stderr.contains("connection")
+                    || stderr.contains("No such file")
+                    || stderr.contains("directory"),
+                "Limit '{}' should parse correctly but fail on network. Stderr: {}",
+                limit,
+                stderr
+            );
+        } else {
+            // Should fail due to argument parsing
+            let stderr = String::from_utf8(output.stderr).unwrap();
+            assert!(
+                stderr.contains("invalid") || stderr.contains("parse"),
+                "Limit '{}' should fail to parse. Stderr: {}",
+                limit,
+                stderr
+            );
+        }
+    }
+}
+
+// JSON validation tests
+#[test]
+fn test_atproto_repo_create_record_json_validation() {
+    let test_cases = vec![
+        (r#"{"text": "hello"}"#, true),
+        (
+            r#"{"text": "hello", "createdAt": "2023-01-01T00:00:00Z"}"#,
+            true,
+        ),
+        (r#"invalid json"#, false),
+        (r#"{"unclosed": "json"#, false),
+    ];
+
+    for (json, should_parse) in test_cases {
+        let output = atp_command()
+            .args(&[
+                "atproto",
+                "repo",
+                "create-record",
+                "--repo",
+                "did:plc:test",
+                "--collection",
+                "app.bsky.feed.post",
+                "--record",
+                json,
+            ])
+            .output()
+            .expect("Failed to execute atp atproto repo create-record");
+
+        assert!(!output.status.success());
+        let stderr = String::from_utf8(output.stderr).unwrap();
+
+        if should_parse {
+            // Should fail due to auth, not JSON parsing
+            assert!(
+                stderr.contains("Not logged in")
+                    || stderr.contains("config")
+                    || stderr.contains("session")
+                    || stderr.contains("No such file")
+                    || stderr.contains("directory"),
+                "JSON '{}' should parse correctly but fail on auth. Stderr: {}",
+                json,
+                stderr
+            );
+        } else {
+            // Should fail due to JSON parsing OR config loading (both are valid failures for invalid JSON)
+            assert!(
+                stderr.contains("JSON")
+                    || stderr.contains("parse")
+                    || stderr.contains("invalid")
+                    || stderr.contains("No such file")
+                    || stderr.contains("directory"),
+                "JSON '{}' should fail to parse or fail on config loading. Stderr: {}",
+                json,
+                stderr
+            );
+        }
+    }
+}

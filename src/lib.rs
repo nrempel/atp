@@ -1,3 +1,4 @@
+pub mod atproto;
 pub mod auth;
 pub mod bsky;
 pub mod format;
