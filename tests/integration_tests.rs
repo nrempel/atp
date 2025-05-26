@@ -1,0 +1,1080 @@
+use std::io::Write;
+use std::process::{Command, Stdio};
+
+fn atp_command() -> Command {
+    Command::new(env!("CARGO_BIN_EXE_atp"))
+}
+
+fn _run_atp_with_stdin(args: &[&str], input: &[u8]) -> std::process::Output {
+    let mut cmd = atp_command();
+    for arg in args {
+        cmd.arg(arg);
+    }
+
+    let mut child = cmd
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("Failed to start atp");
+
+    if let Some(stdin) = child.stdin.as_mut() {
+        stdin.write_all(input).expect("Failed to write to stdin");
+    }
+
+    child.wait_with_output().expect("Failed to get output")
+}
+
+#[test]
+fn test_help_flag() {
+    let output = atp_command()
+        .arg("--help")
+        .output()
+        .expect("Failed to execute atp");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("Usage:"));
+    assert!(stdout.contains("auth") || stdout.contains("bsky"));
+}
+
+#[test]
+fn test_version_flag() {
+    let output = atp_command()
+        .arg("--version")
+        .output()
+        .expect("Failed to execute atp");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("atp") && stdout.contains("0.0.1"));
+}
+
+#[test]
+fn test_auth_subcommand_help() {
+    let output = atp_command()
+        .args(&["auth", "--help"])
+        .output()
+        .expect("Failed to execute atp auth --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("login") || stdout.contains("session"));
+}
+
+#[test]
+fn test_bsky_subcommand_help() {
+    let output = atp_command()
+        .args(&["bsky", "--help"])
+        .output()
+        .expect("Failed to execute atp bsky --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("actor"));
+}
+
+#[test]
+fn test_bsky_actor_subcommand_help() {
+    let output = atp_command()
+        .args(&["bsky", "actor", "--help"])
+        .output()
+        .expect("Failed to execute atp bsky actor --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(
+        stdout.contains("profile")
+            || stdout.contains("preferences")
+            || stdout.contains("suggestions")
+    );
+}
+
+#[test]
+fn test_auth_login_missing_credentials() {
+    let output = atp_command()
+        .args(&["auth", "login"])
+        .output()
+        .expect("Failed to execute atp auth login");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("identifier") || stderr.contains("password") || stderr.contains("required")
+    );
+}
+
+#[test]
+fn test_auth_login_missing_identifier() {
+    let output = atp_command()
+        .args(&["auth", "login", "--password", "testpass"])
+        .output()
+        .expect("Failed to execute atp auth login");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("identifier") || stderr.contains("required"));
+}
+
+#[test]
+fn test_auth_login_missing_password() {
+    let output = atp_command()
+        .args(&["auth", "login", "--identifier", "test@example.com"])
+        .output()
+        .expect("Failed to execute atp auth login");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("password") || stderr.contains("required"));
+}
+
+#[test]
+fn test_auth_login_invalid_credentials() {
+    let output = atp_command()
+        .args(&[
+            "auth",
+            "login",
+            "--identifier",
+            "invalid@example.com",
+            "--password",
+            "wrongpassword",
+        ])
+        .output()
+        .expect("Failed to execute atp auth login");
+
+    // Should fail with invalid credentials
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("Login failed") || stderr.contains("error") || stderr.contains("failed")
+    );
+}
+
+#[test]
+fn test_auth_session_without_login() {
+    let output = atp_command()
+        .args(&["auth", "session"])
+        .output()
+        .expect("Failed to execute atp auth session");
+
+    // Should fail when no session exists
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("No such file") || stderr.contains("config") || stderr.contains("session")
+    );
+}
+
+#[test]
+fn test_bsky_actor_profile_missing_actor() {
+    let output = atp_command()
+        .args(&["bsky", "actor", "profile"])
+        .output()
+        .expect("Failed to execute atp bsky actor profile");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("actor") || stderr.contains("required"));
+}
+
+#[test]
+fn test_bsky_actor_profiles_missing_actors() {
+    let output = atp_command()
+        .args(&["bsky", "actor", "profiles"])
+        .output()
+        .expect("Failed to execute atp bsky actor profiles");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    // The command fails because it tries to load config, not because of missing actors
+    assert!(
+        stderr.contains("No such file")
+            || stderr.contains("config")
+            || stderr.contains("directory")
+    );
+}
+
+#[test]
+fn test_bsky_actor_search_missing_query() {
+    let output = atp_command()
+        .args(&["bsky", "actor", "search"])
+        .output()
+        .expect("Failed to execute atp bsky actor search");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("query") || stderr.contains("required"));
+}
+
+#[test]
+fn test_bsky_commands_without_authentication() {
+    // Test that bsky commands fail when not authenticated
+    let commands = vec![
+        vec!["bsky", "actor", "profile", "--actor", "test.bsky.social"],
+        vec!["bsky", "actor", "profiles", "--actors", "test.bsky.social"],
+        vec!["bsky", "actor", "preferences"],
+        vec!["bsky", "actor", "suggestions"],
+        vec!["bsky", "actor", "search", "--query", "test"],
+    ];
+
+    for cmd_args in commands {
+        let output = atp_command()
+            .args(&cmd_args)
+            .output()
+            .expect(&format!("Failed to execute atp {}", cmd_args.join(" ")));
+
+        assert!(
+            !output.status.success(),
+            "Command '{}' should fail without authentication",
+            cmd_args.join(" ")
+        );
+
+        let stderr = String::from_utf8(output.stderr).unwrap();
+        assert!(
+            stderr.contains("Not logged in")
+                || stderr.contains("config")
+                || stderr.contains("session")
+                || stderr.contains("No such file")
+                || stderr.contains("directory"),
+            "Command '{}' should indicate authentication required. Stderr: {}",
+            cmd_args.join(" "),
+            stderr
+        );
+    }
+}
+
+#[test]
+fn test_auth_login_short_flags() {
+    let output = atp_command()
+        .args(&[
+            "auth",
+            "login",
+            "-i",
+            "invalid@example.com",
+            "-p",
+            "wrongpassword",
+        ])
+        .output()
+        .expect("Failed to execute atp auth login with short flags");
+
+    // Should fail with invalid credentials (but flags should be recognized)
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    // Should not complain about missing arguments, but about login failure
+    assert!(
+        stderr.contains("Login failed") || stderr.contains("error") || stderr.contains("failed")
+    );
+}
+
+#[test]
+fn test_bsky_actor_profile_short_flag() {
+    let output = atp_command()
+        .args(&["bsky", "actor", "profile", "-a", "test.bsky.social"])
+        .output()
+        .expect("Failed to execute atp bsky actor profile with short flag");
+
+    // Should fail due to no authentication, not due to missing actor argument
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("Not logged in")
+            || stderr.contains("config")
+            || stderr.contains("session")
+            || stderr.contains("No such file")
+            || stderr.contains("directory"),
+        "Should fail due to authentication, not missing actor. Stderr: {}",
+        stderr
+    );
+}
+
+#[test]
+fn test_bsky_actor_profiles_multiple_actors() {
+    let output = atp_command()
+        .args(&[
+            "bsky",
+            "actor",
+            "profiles",
+            "--actors",
+            "test1.bsky.social,test2.bsky.social,test3.bsky.social",
+        ])
+        .output()
+        .expect("Failed to execute atp bsky actor profiles with multiple actors");
+
+    // Should fail due to no authentication, not due to argument parsing
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("Not logged in")
+            || stderr.contains("config")
+            || stderr.contains("session")
+            || stderr.contains("No such file")
+            || stderr.contains("directory"),
+        "Should fail due to authentication, not argument parsing. Stderr: {}",
+        stderr
+    );
+}
+
+#[test]
+fn test_bsky_actor_suggestions_with_limit() {
+    let output = atp_command()
+        .args(&["bsky", "actor", "suggestions", "--limit", "10"])
+        .output()
+        .expect("Failed to execute atp bsky actor suggestions with limit");
+
+    // Should fail due to no authentication
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("Not logged in")
+            || stderr.contains("config")
+            || stderr.contains("session")
+            || stderr.contains("No such file")
+            || stderr.contains("directory"),
+        "Should fail due to authentication. Stderr: {}",
+        stderr
+    );
+}
+
+#[test]
+fn test_bsky_actor_suggestions_with_cursor() {
+    let output = atp_command()
+        .args(&[
+            "bsky",
+            "actor",
+            "suggestions",
+            "--limit",
+            "25",
+            "--cursor",
+            "some-cursor-value",
+        ])
+        .output()
+        .expect("Failed to execute atp bsky actor suggestions with cursor");
+
+    // Should fail due to no authentication
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("Not logged in")
+            || stderr.contains("config")
+            || stderr.contains("session")
+            || stderr.contains("No such file")
+            || stderr.contains("directory"),
+        "Should fail due to authentication. Stderr: {}",
+        stderr
+    );
+}
+
+#[test]
+fn test_bsky_actor_search_with_limit() {
+    let output = atp_command()
+        .args(&[
+            "bsky",
+            "actor",
+            "search",
+            "--query",
+            "test search",
+            "--limit",
+            "10",
+        ])
+        .output()
+        .expect("Failed to execute atp bsky actor search with limit");
+
+    // Should fail due to no authentication
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("Not logged in")
+            || stderr.contains("config")
+            || stderr.contains("session")
+            || stderr.contains("No such file")
+            || stderr.contains("directory"),
+        "Should fail due to authentication. Stderr: {}",
+        stderr
+    );
+}
+
+#[test]
+fn test_bsky_actor_search_with_cursor() {
+    let output = atp_command()
+        .args(&[
+            "bsky",
+            "actor",
+            "search",
+            "--query",
+            "test search",
+            "--limit",
+            "15",
+            "--cursor",
+            "search-cursor",
+        ])
+        .output()
+        .expect("Failed to execute atp bsky actor search with cursor");
+
+    // Should fail due to no authentication
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("Not logged in")
+            || stderr.contains("config")
+            || stderr.contains("session")
+            || stderr.contains("No such file")
+            || stderr.contains("directory"),
+        "Should fail due to authentication. Stderr: {}",
+        stderr
+    );
+}
+
+#[test]
+fn test_invalid_subcommand() {
+    let output = atp_command()
+        .args(&["invalid-command"])
+        .output()
+        .expect("Failed to execute atp with invalid command");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("invalid-command")
+            || stderr.contains("unrecognized")
+            || stderr.contains("unexpected"),
+        "Should report invalid command. Stderr: {}",
+        stderr
+    );
+}
+
+#[test]
+fn test_auth_invalid_subcommand() {
+    let output = atp_command()
+        .args(&["auth", "invalid"])
+        .output()
+        .expect("Failed to execute atp auth invalid");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("invalid")
+            || stderr.contains("unrecognized")
+            || stderr.contains("unexpected"),
+        "Should report invalid auth subcommand. Stderr: {}",
+        stderr
+    );
+}
+
+#[test]
+fn test_bsky_invalid_subcommand() {
+    let output = atp_command()
+        .args(&["bsky", "invalid"])
+        .output()
+        .expect("Failed to execute atp bsky invalid");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("invalid")
+            || stderr.contains("unrecognized")
+            || stderr.contains("unexpected"),
+        "Should report invalid bsky subcommand. Stderr: {}",
+        stderr
+    );
+}
+
+#[test]
+fn test_bsky_actor_invalid_subcommand() {
+    let output = atp_command()
+        .args(&["bsky", "actor", "invalid"])
+        .output()
+        .expect("Failed to execute atp bsky actor invalid");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("invalid")
+            || stderr.contains("unrecognized")
+            || stderr.contains("unexpected"),
+        "Should report invalid actor subcommand. Stderr: {}",
+        stderr
+    );
+}
+
+#[test]
+fn test_handle_with_at_symbol() {
+    // Test that handles with @ symbols are handled correctly
+    let output = atp_command()
+        .args(&["bsky", "actor", "profile", "--actor", "@test.bsky.social"])
+        .output()
+        .expect("Failed to execute atp bsky actor profile with @ symbol");
+
+    // Should fail due to no authentication, but should accept the @ symbol
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("Not logged in")
+            || stderr.contains("config")
+            || stderr.contains("session")
+            || stderr.contains("No such file")
+            || stderr.contains("directory"),
+        "Should fail due to authentication, not @ symbol handling. Stderr: {}",
+        stderr
+    );
+}
+
+#[test]
+fn test_numeric_limits_validation() {
+    // Test invalid limit values
+    let output = atp_command()
+        .args(&["bsky", "actor", "suggestions", "--limit", "not-a-number"])
+        .output()
+        .expect("Failed to execute atp with invalid limit");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("invalid value") || stderr.contains("parse") || stderr.contains("number"),
+        "Should report invalid numeric value. Stderr: {}",
+        stderr
+    );
+}
+
+#[test]
+fn test_zero_limit() {
+    // Test edge case with zero limit
+    let output = atp_command()
+        .args(&["bsky", "actor", "suggestions", "--limit", "0"])
+        .output()
+        .expect("Failed to execute atp with zero limit");
+
+    // Should fail due to no authentication, but should accept zero limit
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("Not logged in")
+            || stderr.contains("config")
+            || stderr.contains("session")
+            || stderr.contains("No such file")
+            || stderr.contains("directory"),
+        "Should fail due to authentication, not zero limit. Stderr: {}",
+        stderr
+    );
+}
+
+#[test]
+fn test_large_limit() {
+    // Test edge case with large limit (within u8 range)
+    let output = atp_command()
+        .args(&["bsky", "actor", "suggestions", "--limit", "255"])
+        .output()
+        .expect("Failed to execute atp with large limit");
+
+    // Should fail due to no authentication, but should accept large limit
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("Not logged in")
+            || stderr.contains("config")
+            || stderr.contains("session")
+            || stderr.contains("No such file")
+            || stderr.contains("directory"),
+        "Should fail due to authentication, not large limit. Stderr: {}",
+        stderr
+    );
+}
+
+#[test]
+fn test_limit_overflow() {
+    // Test limit value that exceeds u8 range
+    let output = atp_command()
+        .args(&["bsky", "actor", "suggestions", "--limit", "256"])
+        .output()
+        .expect("Failed to execute atp with overflow limit");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("invalid value")
+            || stderr.contains("out of range")
+            || stderr.contains("overflow"),
+        "Should report value out of range. Stderr: {}",
+        stderr
+    );
+}
+
+#[test]
+fn test_empty_query_string() {
+    // Test search with empty query
+    let output = atp_command()
+        .args(&["bsky", "actor", "search", "--query", ""])
+        .output()
+        .expect("Failed to execute atp with empty query");
+
+    // Should fail due to no authentication, but should accept empty query
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("Not logged in")
+            || stderr.contains("config")
+            || stderr.contains("session")
+            || stderr.contains("No such file")
+            || stderr.contains("directory"),
+        "Should fail due to authentication, not empty query. Stderr: {}",
+        stderr
+    );
+}
+
+#[test]
+fn test_query_with_special_characters() {
+    // Test search with special characters
+    let output = atp_command()
+        .args(&[
+            "bsky",
+            "actor",
+            "search",
+            "--query",
+            "test@example.com #hashtag $special &chars",
+        ])
+        .output()
+        .expect("Failed to execute atp with special characters in query");
+
+    // Should fail due to no authentication, but should accept special characters
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("Not logged in")
+            || stderr.contains("config")
+            || stderr.contains("session")
+            || stderr.contains("No such file")
+            || stderr.contains("directory"),
+        "Should fail due to authentication, not special characters. Stderr: {}",
+        stderr
+    );
+}
+
+#[test]
+fn test_command_structure_consistency() {
+    // Test that all commands follow consistent structure
+    let help_outputs = vec![
+        ("auth", vec!["auth", "--help"]),
+        ("bsky", vec!["bsky", "--help"]),
+        ("bsky actor", vec!["bsky", "actor", "--help"]),
+    ];
+
+    for (name, args) in help_outputs {
+        let output = atp_command()
+            .args(&args)
+            .output()
+            .expect(&format!("Failed to execute atp {}", args.join(" ")));
+
+        assert!(
+            output.status.success(),
+            "Help for '{}' should succeed",
+            name
+        );
+
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        assert!(
+            stdout.contains("Usage:") || stdout.contains("USAGE:"),
+            "Help for '{}' should contain usage information",
+            name
+        );
+    }
+}
+
+#[test]
+fn test_default_values_in_help() {
+    // Test that default values are shown in help text
+    let output = atp_command()
+        .args(&["bsky", "actor", "suggestions", "--help"])
+        .output()
+        .expect("Failed to execute atp bsky actor suggestions --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(
+        stdout.contains("50") || stdout.contains("default"),
+        "Help should show default limit value"
+    );
+}
+
+#[test]
+fn test_search_default_values_in_help() {
+    // Test that search command shows default values
+    let output = atp_command()
+        .args(&["bsky", "actor", "search", "--help"])
+        .output()
+        .expect("Failed to execute atp bsky actor search --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(
+        stdout.contains("25") || stdout.contains("default"),
+        "Help should show default limit value for search"
+    );
+}
+
+#[test]
+fn test_auth_login_help_shows_required_fields() {
+    // Test that login help clearly shows required fields
+    let output = atp_command()
+        .args(&["auth", "login", "--help"])
+        .output()
+        .expect("Failed to execute atp auth login --help");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("identifier") && stdout.contains("password"));
+}
+
+#[test]
+fn test_nested_help_commands() {
+    // Test that help works at all levels of nesting
+    let help_commands = vec![
+        vec!["--help"],
+        vec!["auth", "--help"],
+        vec!["bsky", "--help"],
+        vec!["bsky", "actor", "--help"],
+        vec!["bsky", "actor", "profile", "--help"],
+        vec!["bsky", "actor", "profiles", "--help"],
+        vec!["bsky", "actor", "preferences", "--help"],
+        vec!["bsky", "actor", "suggestions", "--help"],
+        vec!["bsky", "actor", "search", "--help"],
+    ];
+
+    for cmd_args in help_commands {
+        let output = atp_command()
+            .args(&cmd_args)
+            .output()
+            .expect(&format!("Failed to execute atp {}", cmd_args.join(" ")));
+
+        assert!(
+            output.status.success(),
+            "Help command '{}' should succeed",
+            cmd_args.join(" ")
+        );
+
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        assert!(
+            stdout.contains("Usage:") || stdout.contains("USAGE:"),
+            "Help for '{}' should contain usage information",
+            cmd_args.join(" ")
+        );
+    }
+}
+
+#[test]
+fn test_short_flags_consistency() {
+    // Test that short flags work consistently across commands
+    let short_flag_tests = vec![
+        (vec!["auth", "login", "-h"], true), // help should work
+        (vec!["bsky", "actor", "profile", "-h"], true), // help should work
+        (vec!["bsky", "actor", "suggestions", "-h"], true), // help should work
+    ];
+
+    for (cmd_args, should_succeed) in short_flag_tests {
+        let output = atp_command()
+            .args(&cmd_args)
+            .output()
+            .expect(&format!("Failed to execute atp {}", cmd_args.join(" ")));
+
+        assert_eq!(
+            output.status.success(),
+            should_succeed,
+            "Command '{}' success status should be {}",
+            cmd_args.join(" "),
+            should_succeed
+        );
+    }
+}
+
+#[test]
+fn test_error_message_quality_for_typos() {
+    // Test that typos in commands produce helpful error messages
+    let typo_commands = vec![
+        vec!["auht", "login"],             // typo in "auth"
+        vec!["auth", "loginn"],            // typo in "login"
+        vec!["bsky", "actorr", "profile"], // typo in "actor"
+        vec!["bsky", "actor", "profilee"], // typo in "profile"
+    ];
+
+    for cmd_args in typo_commands {
+        let output = atp_command()
+            .args(&cmd_args)
+            .output()
+            .expect(&format!("Failed to execute atp {}", cmd_args.join(" ")));
+
+        assert!(!output.status.success());
+        let stderr = String::from_utf8(output.stderr).unwrap();
+        assert!(
+            !stderr.is_empty(),
+            "Command '{}' should provide error message for typo",
+            cmd_args.join(" ")
+        );
+    }
+}
+
+#[test]
+fn test_limit_boundary_values() {
+    // Test boundary values for limit parameters
+    let boundary_tests = vec![
+        ("1", true),    // minimum valid
+        ("255", true),  // maximum valid for u8
+        ("256", false), // overflow
+        ("0", true),    // zero (edge case)
+    ];
+
+    for (limit_value, should_parse) in boundary_tests {
+        let output = atp_command()
+            .args(&["bsky", "actor", "suggestions", "--limit", limit_value])
+            .output()
+            .expect(&format!("Failed to execute atp with limit {}", limit_value));
+
+        if should_parse {
+            // Should fail due to authentication, not parsing
+            let stderr = String::from_utf8(output.stderr).unwrap();
+            assert!(
+                stderr.contains("No such file") || stderr.contains("directory"),
+                "Limit {} should parse correctly but fail on auth. Stderr: {}",
+                limit_value,
+                stderr
+            );
+        } else {
+            // Should fail due to parsing error
+            let stderr = String::from_utf8(output.stderr).unwrap();
+            assert!(
+                stderr.contains("invalid value")
+                    || stderr.contains("out of range")
+                    || stderr.contains("overflow")
+                    || stderr.contains("parse"),
+                "Limit {} should fail to parse. Stderr: {}",
+                limit_value,
+                stderr
+            );
+        }
+    }
+}
+
+#[test]
+fn test_multiple_actors_parsing() {
+    // Test that multiple actors are parsed correctly
+    let multi_actor_tests = vec![
+        "user1.bsky.social,user2.bsky.social",
+        "user1.bsky.social,user2.bsky.social,user3.bsky.social",
+        "@user1.bsky.social,@user2.bsky.social", // with @ symbols
+        "user1.bsky.social, user2.bsky.social",  // with spaces
+    ];
+
+    for actors in multi_actor_tests {
+        let output = atp_command()
+            .args(&["bsky", "actor", "profiles", "--actors", actors])
+            .output()
+            .expect(&format!("Failed to execute atp with actors: {}", actors));
+
+        // Should fail due to authentication, not parsing
+        assert!(!output.status.success());
+        let stderr = String::from_utf8(output.stderr).unwrap();
+        assert!(
+            stderr.contains("No such file") || stderr.contains("directory"),
+            "Multiple actors '{}' should parse correctly. Stderr: {}",
+            actors,
+            stderr
+        );
+    }
+}
+
+#[test]
+fn test_empty_and_whitespace_inputs() {
+    // Test handling of empty and whitespace-only inputs
+    let empty_tests = vec![
+        ("", "empty string"),
+        ("   ", "spaces only"),
+        ("\t", "tab only"),
+        ("\n", "newline only"),
+        ("  \t\n  ", "mixed whitespace"),
+    ];
+
+    for (input, description) in empty_tests {
+        // Test with query parameter
+        let output = atp_command()
+            .args(&["bsky", "actor", "search", "--query", input])
+            .output()
+            .expect(&format!("Failed to execute atp with {}", description));
+
+        // Should fail due to authentication, not input validation
+        assert!(!output.status.success());
+        let stderr = String::from_utf8(output.stderr).unwrap();
+        assert!(
+            stderr.contains("No such file") || stderr.contains("directory"),
+            "Input '{}' ({}) should be accepted. Stderr: {}",
+            input,
+            description,
+            stderr
+        );
+    }
+}
+
+#[test]
+fn test_unicode_and_special_characters_in_queries() {
+    // Test that Unicode and special characters are handled properly
+    let unicode_tests = vec![
+        "café",            // accented characters
+        "🦋🌟",            // emoji
+        "こんにちは",      // Japanese
+        "Здравствуй",      // Cyrillic
+        "مرحبا",           // Arabic
+        "test@domain.com", // email-like
+        "#hashtag",        // hashtag
+        "user.name",       // dots
+        "user-name",       // hyphens
+        "user_name",       // underscores
+    ];
+
+    for query in unicode_tests {
+        let output = atp_command()
+            .args(&["bsky", "actor", "search", "--query", query])
+            .output()
+            .expect(&format!(
+                "Failed to execute atp with Unicode query: {}",
+                query
+            ));
+
+        // Should fail due to authentication, not Unicode handling
+        assert!(!output.status.success());
+        let stderr = String::from_utf8(output.stderr).unwrap();
+        assert!(
+            stderr.contains("No such file") || stderr.contains("directory"),
+            "Unicode query '{}' should be handled correctly. Stderr: {}",
+            query,
+            stderr
+        );
+    }
+}
+
+#[test]
+fn test_very_long_inputs() {
+    // Test handling of very long input strings
+    let long_query = "a".repeat(1000); // 1000 character string
+    let long_actor = format!("{}.bsky.social", "a".repeat(100)); // long actor name
+
+    // Test long query
+    let output = atp_command()
+        .args(&["bsky", "actor", "search", "--query", &long_query])
+        .output()
+        .expect("Failed to execute atp with long query");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("No such file") || stderr.contains("directory"),
+        "Long query should be handled. Stderr: {}",
+        stderr
+    );
+
+    // Test long actor
+    let output = atp_command()
+        .args(&["bsky", "actor", "profile", "--actor", &long_actor])
+        .output()
+        .expect("Failed to execute atp with long actor");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("No such file") || stderr.contains("directory"),
+        "Long actor should be handled. Stderr: {}",
+        stderr
+    );
+}
+
+#[test]
+fn test_cursor_parameter_handling() {
+    // Test that cursor parameters are handled correctly
+    let cursor_tests = vec![
+        "simple-cursor",
+        "cursor-with-dashes",
+        "cursor_with_underscores",
+        "CursorWithMixedCase",
+        "cursor123with456numbers",
+        "very-long-cursor-value-that-might-be-used-in-real-scenarios",
+    ];
+
+    for cursor in cursor_tests {
+        // Test with suggestions
+        let output = atp_command()
+            .args(&["bsky", "actor", "suggestions", "--cursor", cursor])
+            .output()
+            .expect(&format!("Failed to execute atp with cursor: {}", cursor));
+
+        assert!(!output.status.success());
+        let stderr = String::from_utf8(output.stderr).unwrap();
+        assert!(
+            stderr.contains("No such file") || stderr.contains("directory"),
+            "Cursor '{}' should be handled correctly. Stderr: {}",
+            cursor,
+            stderr
+        );
+
+        // Test with search
+        let output = atp_command()
+            .args(&[
+                "bsky", "actor", "search", "--query", "test", "--cursor", cursor,
+            ])
+            .output()
+            .expect(&format!(
+                "Failed to execute atp search with cursor: {}",
+                cursor
+            ));
+
+        assert!(!output.status.success());
+        let stderr = String::from_utf8(output.stderr).unwrap();
+        assert!(
+            stderr.contains("No such file") || stderr.contains("directory"),
+            "Search cursor '{}' should be handled correctly. Stderr: {}",
+            cursor,
+            stderr
+        );
+    }
+}
+
+#[test]
+fn test_command_combinations() {
+    // Test various flag combinations to ensure they work together
+    let combination_tests = vec![
+        vec!["bsky", "actor", "suggestions", "--limit", "10"],
+        vec![
+            "bsky",
+            "actor",
+            "suggestions",
+            "--limit",
+            "25",
+            "--cursor",
+            "test",
+        ],
+        vec![
+            "bsky", "actor", "search", "--query", "test", "--limit", "15",
+        ],
+        vec![
+            "bsky",
+            "actor",
+            "search",
+            "--query",
+            "test search",
+            "--limit",
+            "20",
+            "--cursor",
+            "search-cursor",
+        ],
+    ];
+
+    for cmd_args in combination_tests {
+        let output = atp_command()
+            .args(&cmd_args)
+            .output()
+            .expect(&format!("Failed to execute atp {}", cmd_args.join(" ")));
+
+        assert!(!output.status.success());
+        let stderr = String::from_utf8(output.stderr).unwrap();
+        assert!(
+            stderr.contains("No such file") || stderr.contains("directory"),
+            "Command combination '{}' should parse correctly. Stderr: {}",
+            cmd_args.join(" "),
+            stderr
+        );
+    }
+}

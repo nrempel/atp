@@ -1,4 +1,4 @@
-use atp::{auth::Auth, bsky::actor::Bsky, Client, Config, Process};
+use atp::{Client, Config, Process, auth::Auth, bsky::actor::Bsky};
 use clap::Parser;
 use directories::BaseDirs;
 
@@ -31,6 +31,7 @@ async fn main() -> anyhow::Result<()> {
 }
 
 #[derive(Parser)]
+#[command(author, version, about, long_about = None)]
 enum Options {
     #[command(subcommand)]
     Auth(Auth),
