@@ -20,6 +20,17 @@ pub enum Atproto {
     Sync(sync::Sync),
 }
 
+impl Atproto {
+    pub fn needs_authentication(&self) -> bool {
+        match self {
+            Atproto::Identity(cmd) => cmd.needs_authentication(),
+            Atproto::Repo(cmd) => cmd.needs_authentication(),
+            Atproto::Server(cmd) => cmd.needs_authentication(),
+            Atproto::Sync(cmd) => cmd.needs_authentication(),
+        }
+    }
+}
+
 #[async_trait]
 impl Process for Atproto {
     type Output = String;

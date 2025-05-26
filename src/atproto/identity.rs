@@ -47,6 +47,16 @@ pub struct ResolveDidResponse {
     pub did_doc: serde_json::Value,
 }
 
+impl Identity {
+    pub fn needs_authentication(&self) -> bool {
+        match self {
+            Identity::ResolveHandle(_) => false, // Public endpoint
+            Identity::ResolveDid(_) => true,     // Requires auth (returns 401)
+            Identity::UpdateHandle(_) => true,   // Requires auth
+        }
+    }
+}
+
 #[async_trait]
 impl Process for Identity {
     type Output = String;
@@ -99,12 +109,18 @@ impl Process for ResolveHandle {
 impl Process for ResolveDid {
     type Output = ResolveDidResponse;
 
-    async fn process(&self, client: &Client, _config: &Config) -> anyhow::Result<Self::Output> {
+    async fn process(&self, client: &Client, config: &Config) -> anyhow::Result<Self::Output> {
+        let session = config
+            .session
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Not logged in"))?;
+
         let url = format!("{}/com.atproto.identity.resolveDid", BASE_URL);
         let response = client
             .inner()
             .get(&url)
             .query(&[("did", &self.did)])
+            .header("Authorization", format!("Bearer {}", session.access_jwt))
             .send()
             .await?;
 

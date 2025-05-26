@@ -93,6 +93,18 @@ pub struct RepoRef {
     pub status: Option<String>,
 }
 
+impl Sync {
+    pub fn needs_authentication(&self) -> bool {
+        match self {
+            Sync::GetBlob(_) => false,         // Public endpoint
+            Sync::GetHead(_) => false,         // Public endpoint
+            Sync::GetLatestCommit(_) => false, // Public endpoint
+            Sync::GetRepoStatus(_) => false,   // Public endpoint
+            Sync::ListRepos(_) => false,       // Public endpoint
+        }
+    }
+}
+
 #[async_trait]
 impl Process for Sync {
     type Output = String;

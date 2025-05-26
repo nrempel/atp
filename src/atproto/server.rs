@@ -83,6 +83,18 @@ pub struct ServerLinks {
     pub terms_of_service: Option<String>,
 }
 
+impl Server {
+    pub fn needs_authentication(&self) -> bool {
+        match self {
+            Server::CreateSession(_) => false, // Login doesn't need existing auth
+            Server::GetSession(_) => true,     // Requires auth
+            Server::RefreshSession(_) => true, // Requires auth
+            Server::DeleteSession(_) => true,  // Requires auth
+            Server::DescribeServer(_) => false, // Public endpoint
+        }
+    }
+}
+
 #[async_trait]
 impl Process for Server {
     type Output = String;

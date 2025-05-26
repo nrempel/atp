@@ -27,7 +27,12 @@ async fn main() -> anyhow::Result<()> {
             println!("{response}");
         }
         Options::Atproto(cmd) => {
-            let config = Config::load(&base_dirs).await?;
+            let needs_auth = cmd.needs_authentication();
+            let config = if needs_auth {
+                Config::load(&base_dirs).await?
+            } else {
+                Config::default()
+            };
             let response = cmd.process(&client, &config).await?;
             println!("{response}");
         }

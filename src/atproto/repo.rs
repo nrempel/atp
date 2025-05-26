@@ -145,6 +145,19 @@ pub struct DescribeRepoResponse {
     pub handle_is_correct: bool,
 }
 
+impl Repo {
+    pub fn needs_authentication(&self) -> bool {
+        match self {
+            Repo::CreateRecord(_) => true,  // Requires auth
+            Repo::GetRecord(_) => false,    // Public endpoint
+            Repo::ListRecords(_) => false,  // Public endpoint
+            Repo::DeleteRecord(_) => true,  // Requires auth
+            Repo::UploadBlob(_) => true,    // Requires auth
+            Repo::DescribeRepo(_) => false, // Public endpoint
+        }
+    }
+}
+
 #[async_trait]
 impl Process for Repo {
     type Output = String;
