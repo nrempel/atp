@@ -275,6 +275,273 @@ fn test_identity_update_handle_missing_handle() {
     );
 }
 
-// TODO: com.atproto.repo.* tests will go here
-// TODO: com.atproto.server.* tests will go here
-// TODO: com.atproto.sync.* tests will go here
+// com.atproto.repo.* tests
+#[test]
+fn test_repo_create_record_requires_auth() {
+    let output = atp_command()
+        .args(&[
+            "atproto",
+            "repo",
+            "create-record",
+            "--repo",
+            "test.bsky.social",
+            "--collection",
+            "app.bsky.feed.post",
+            "--record",
+            r#"{"text": "Hello world!", "createdAt": "2024-01-01T00:00:00Z"}"#,
+        ])
+        .output()
+        .expect("Failed to execute create-record");
+
+    assert!(
+        !output.status.success(),
+        "Command should fail without authentication"
+    );
+    let stderr = String::from_utf8(output.stderr).unwrap();
+
+    // Should show authentication error
+    assert!(
+        stderr.contains("No such file")
+            || stderr.contains("Not logged in")
+            || stderr.contains("config"),
+        "Should show authentication error"
+    );
+}
+
+#[test]
+fn test_repo_create_record_missing_repo() {
+    let output = atp_command()
+        .args(&[
+            "atproto",
+            "repo",
+            "create-record",
+            "--collection",
+            "app.bsky.feed.post",
+            "--record",
+            r#"{"text": "Hello world!"}"#,
+        ])
+        .output()
+        .expect("Failed to execute create-record");
+
+    assert!(!output.status.success(), "Command should fail without repo");
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("repo") || stderr.contains("required"),
+        "Should show missing repo error"
+    );
+}
+
+#[test]
+fn test_repo_create_record_missing_collection() {
+    let output = atp_command()
+        .args(&[
+            "atproto",
+            "repo",
+            "create-record",
+            "--repo",
+            "test.bsky.social",
+            "--record",
+            r#"{"text": "Hello world!"}"#,
+        ])
+        .output()
+        .expect("Failed to execute create-record");
+
+    assert!(
+        !output.status.success(),
+        "Command should fail without collection"
+    );
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("collection") || stderr.contains("required"),
+        "Should show missing collection error"
+    );
+}
+
+#[test]
+fn test_repo_create_record_missing_record() {
+    let output = atp_command()
+        .args(&[
+            "atproto",
+            "repo",
+            "create-record",
+            "--repo",
+            "test.bsky.social",
+            "--collection",
+            "app.bsky.feed.post",
+        ])
+        .output()
+        .expect("Failed to execute create-record");
+
+    assert!(
+        !output.status.success(),
+        "Command should fail without record"
+    );
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("record") || stderr.contains("required"),
+        "Should show missing record error"
+    );
+}
+
+#[test]
+fn test_repo_create_record_invalid_json() {
+    let output = atp_command()
+        .args(&[
+            "atproto",
+            "repo",
+            "create-record",
+            "--repo",
+            "test.bsky.social",
+            "--collection",
+            "app.bsky.feed.post",
+            "--record",
+            "invalid json",
+        ])
+        .output()
+        .expect("Failed to execute create-record");
+
+    assert!(
+        !output.status.success(),
+        "Command should fail with invalid JSON"
+    );
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("JSON")
+            || stderr.contains("parse")
+            || stderr.contains("invalid")
+            || stderr.contains("No such file"), // May fail on config loading before JSON parsing
+        "Should show JSON parsing error or config error"
+    );
+}
+
+#[test]
+fn test_repo_get_record_success() {
+    let output = atp_command()
+        .args(&[
+            "atproto",
+            "repo",
+            "get-record",
+            "--repo",
+            "bsky.app",
+            "--collection",
+            "app.bsky.feed.post",
+            "--rkey",
+            "3lpk2ljkgjd2t",
+        ])
+        .output()
+        .expect("Failed to execute get-record");
+
+    assert!(output.status.success(), "Command should succeed");
+    let stdout = String::from_utf8(output.stdout).unwrap();
+
+    // Should return record data
+    assert!(stdout.contains("URI:"), "Should show URI");
+    assert!(stdout.contains("CID:"), "Should show CID");
+    assert!(stdout.contains("Value:"), "Should show record value");
+    assert!(
+        stdout.contains("app.bsky.feed.post"),
+        "Should show post type"
+    );
+}
+
+#[test]
+fn test_repo_get_record_missing_repo() {
+    let output = atp_command()
+        .args(&[
+            "atproto",
+            "repo",
+            "get-record",
+            "--collection",
+            "app.bsky.actor.profile",
+            "--rkey",
+            "self",
+        ])
+        .output()
+        .expect("Failed to execute get-record");
+
+    assert!(!output.status.success(), "Command should fail without repo");
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("repo") || stderr.contains("required"),
+        "Should show missing repo error"
+    );
+}
+
+#[test]
+fn test_repo_get_record_missing_collection() {
+    let output = atp_command()
+        .args(&[
+            "atproto",
+            "repo",
+            "get-record",
+            "--repo",
+            "jay.bsky.social",
+            "--rkey",
+            "self",
+        ])
+        .output()
+        .expect("Failed to execute get-record");
+
+    assert!(
+        !output.status.success(),
+        "Command should fail without collection"
+    );
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("collection") || stderr.contains("required"),
+        "Should show missing collection error"
+    );
+}
+
+#[test]
+fn test_repo_get_record_missing_rkey() {
+    let output = atp_command()
+        .args(&[
+            "atproto",
+            "repo",
+            "get-record",
+            "--repo",
+            "jay.bsky.social",
+            "--collection",
+            "app.bsky.actor.profile",
+        ])
+        .output()
+        .expect("Failed to execute get-record");
+
+    assert!(!output.status.success(), "Command should fail without rkey");
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("rkey") || stderr.contains("required"),
+        "Should show missing rkey error"
+    );
+}
+
+#[test]
+fn test_repo_get_record_nonexistent() {
+    let output = atp_command()
+        .args(&[
+            "atproto",
+            "repo",
+            "get-record",
+            "--repo",
+            "jay.bsky.social",
+            "--collection",
+            "app.bsky.feed.post",
+            "--rkey",
+            "nonexistent-record-12345",
+        ])
+        .output()
+        .expect("Failed to execute get-record");
+
+    assert!(
+        !output.status.success(),
+        "Command should fail for nonexistent record"
+    );
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("Failed to get record") || stderr.contains("error"),
+        "Should show appropriate error"
+    );
+}
+
+// TODO: com.atproto.repo.listRecords tests will go here
